@@ -1,14 +1,10 @@
-// 1. Importe o CSS do Grid
-import './Overview.css';
-
-// 2. Importe os componentes do Dashboard
+// Importe os componentes do Dashboard
 import { KPICard } from '@/components/dashboard/KPICard';
 import { ProdutividadeChart } from '@/components/dashboard/ProdutividadeChart';
 import { AlertasList } from '@/components/dashboard/AlertasList';
-// Importação do CargaTrabalhoChart
-import { CargaTrabalhoChart } from '@/components/dashboard/CargaTrabalhoChart'; // <-- ALTERAÇÃO: Linha adicionada
+import { CargaTrabalhoChart } from '@/components/dashboard/CargaTrabalhoChart';
 
-// 3. Importe os Dados Mockados
+// Importe os Dados Mockados
 import { 
   mockProdutividadeSemanal, 
   mockCargaFiscal, // Agora este será usado ativamente
@@ -31,10 +27,10 @@ export default function Overview() {
     <div>
       <h1 className="text-3xl font-bold p-6">Visão Geral (Supervisão)</h1>
 
-      <div className="dashboard-grid">
+      <div className="grid grid-cols-4 gap-6 p-6">
         
         {/* --- Seção 1: Indicadores de Performance --- */}
-        <h2 className="section-title">Indicadores de Performance</h2>
+        <h2 className="text-2xl font-semibold mb-4 col-span-full">Indicadores de Performance</h2>
         <KPICard 
           title="Total de Registros (Semana)" 
           value={kpiData.totalRegistros} 
@@ -55,31 +51,30 @@ export default function Overview() {
         />
 
         {/* --- Seção 2: Tendências e Distribuição --- */}
-        <h2 className="section-title">Tendências e Distribuição</h2>
-        <ProdutividadeChart data={mockProdutividadeSemanal} />
-        
-        {/* Renderização do CargaTrabalhoChart */}
-        {/* <-- ALTERAÇÃO: Bloco de código descomentado e classe aplicada --> */}
+        <h2 className="text-2xl font-semibold mb-4 col-span-full">Tendências e Distribuição</h2>
+        <div className="col-span-3">
+          <ProdutividadeChart data={mockProdutividadeSemanal} />
+        </div>
         <CargaTrabalhoChart 
           data={mockCargaFiscal} 
-          className="chart-carga-trabalho" 
+          className="col-span-1" 
         />
 
         {/* --- Seção 3: Alertas e Foco Crítico --- */}
-        <h2 className="section-title">Alertas e Foco Crítico</h2>
+        <h2 className="text-2xl font-semibold mb-4 col-span-full">Alertas e Foco Crítico</h2>
         <AlertasList 
           title="Top 5 Locais Críticos (Nível Máximo)"
           headers={['Local', 'Nível', 'Data']}
           items={mockLocaisCriticos}
           keysToShow={['local', 'nivel', 'data']}
-          className="list-locais-criticos"
+          className="col-span-2"
         />
         <AlertasList 
           title="Top 5 Pendências Antigas"
           headers={['Fiscal', 'Local', 'Data do Registro']}
           items={mockPendenciasAntigas}
           keysToShow={['fiscal', 'local', 'data']}
-          className="list-pendencias"
+          className="col-span-2"
         />
       </div>
     </div>
