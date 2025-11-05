@@ -25,12 +25,12 @@ export default function Overview() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold p-6">Visão Geral (Supervisão)</h1>
+      <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral (Supervisão)</h1>
 
-      <div className="grid grid-cols-4 gap-6 p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 p-4 md:p-6">
         
         {/* --- Seção 1: Indicadores de Performance --- */}
-        <h2 className="text-2xl font-semibold mb-4 col-span-full">Indicadores de Performance</h2>
+        <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Indicadores de Performance</h2>
         <KPICard 
           title="Total de Registros (Semana)" 
           value={kpiData.totalRegistros} 
@@ -51,31 +51,34 @@ export default function Overview() {
         />
 
         {/* --- Seção 2: Tendências e Distribuição --- */}
-        <h2 className="text-2xl font-semibold mb-4 col-span-full">Tendências e Distribuição</h2>
-        <div className="col-span-3">
+        <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Tendências e Distribuição</h2>
+        <div className="col-span-1 md:col-span-2 lg:col-span-3">
           <ProdutividadeChart data={mockProdutividadeSemanal} />
         </div>
-        <CargaTrabalhoChart 
-          data={mockCargaFiscal} 
-          className="col-span-1" 
-        />
+        <div className="col-span-1 md:col-span-2 lg:col-span-1">
+          <CargaTrabalhoChart 
+            data={mockCargaFiscal} 
+          />
+        </div>
 
         {/* --- Seção 3: Alertas e Foco Crítico --- */}
-        <h2 className="text-2xl font-semibold mb-4 col-span-full">Alertas e Foco Crítico</h2>
-        <AlertasList 
-          title="Top 5 Locais Críticos (Nível Máximo)"
-          headers={['Local', 'Nível', 'Data']}
-          items={mockLocaisCriticos}
-          keysToShow={['local', 'nivel', 'data']}
-          className="col-span-2"
-        />
-        <AlertasList 
-          title="Top 5 Pendências Antigas"
-          headers={['Fiscal', 'Local', 'Data do Registro']}
-          items={mockPendenciasAntigas}
-          keysToShow={['fiscal', 'local', 'data']}
-          className="col-span-2"
-        />
+        <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Alertas e Foco Crítico</h2>
+        <div className="col-span-1 md:col-span-2 lg:col-span-2">
+          <AlertasList 
+            title="Top 5 Locais Críticos (Nível Máximo)"
+            headers={['Local', 'Nível', 'Data']}
+            items={mockLocaisCriticos}
+            keysToShow={['local', 'nivel', 'data']}
+          />
+        </div>
+        <div className="col-span-1 md:col-span-2 lg:col-span-2">
+          <AlertasList 
+            title="Top 5 Pendências Antigas"
+            headers={['Fiscal', 'Local', 'Data do Registro']}
+            items={mockPendenciasAntigas}
+            keysToShow={['fiscal', 'local', 'data']}
+          />
+        </div>
       </div>
     </div>
   );

@@ -37,11 +37,11 @@ function getNivelColor(nivel: NivelAtividade): string {
 function getStatusIcon(status: StatusAtividade) {
   switch (status) {
     case 'Concluído':
-      return <CheckCircle className="h-5 w-5 text-green-600" />;
+      return <CheckCircle className="h-5 w-5 text-green-600" aria-label="Status: Concluído" />;
     case 'Pendente':
-      return <Clock className="h-5 w-5 text-yellow-600" />;
+      return <Clock className="h-5 w-5 text-yellow-600" aria-label="Status: Pendente" />;
     case 'Não Concluído':
-      return <XCircle className="h-5 w-5 text-red-600" />;
+      return <XCircle className="h-5 w-5 text-red-600" aria-label="Status: Não Concluído" />;
     default:
       return null;
   }
@@ -255,10 +255,33 @@ export default function Atividades() {
   const [isLocating, setIsLocating] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   
+  // Estados para bloco e locais
+  const [blocoSelecionado, setBlocoSelecionado] = useState<string>("");
+  const [locaisSelecionados, setLocaisSelecionados] = useState<{
+    hall: boolean;
+    sala: boolean;
+    laboratorio: boolean;
+    banheiros: boolean;
+  }>({
+    hall: false,
+    sala: false,
+    laboratorio: false,
+    banheiros: false,
+  });
+  
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Atividade | null>(null);
 
-  const canSave = descricao.trim() !== "" && nivel !== "" && status !== "";
+  // Lista de blocos disponíveis
+  const blocos = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+  
+  // Verifica se pelo menos um local foi selecionado
+  const temLocalSelecionado = locaisSelecionados.hall || locaisSelecionados.sala || locaisSelecionados.laboratorio || locaisSelecionados.banheiros;
+  
+  // A descrição só pode ser editada se bloco e pelo menos um local estiverem selecionados
+  const podeEscreverDescricao = blocoSelecionado !== "" && temLocalSelecionado;
+  
+  const canSave = descricao.trim() !== "" && nivel !== "" && status !== "" && blocoSelecionado !== "" && temLocalSelecionado;
 
   function openAddDialog() {
     setDescricao("");
@@ -267,7 +290,21 @@ export default function Atividades() {
     setLat("");
     setLng("");
     setPhotoPreview(null);
+    setBlocoSelecionado("");
+    setLocaisSelecionados({
+      hall: false,
+      sala: false,
+      laboratorio: false,
+      banheiros: false,
+    });
     setIsDialogOpen(true);
+  }
+  
+  function toggleLocal(local: keyof typeof locaisSelecionados) {
+    setLocaisSelecionados((prev) => ({
+      ...prev,
+      [local]: !prev[local],
+    }));
   }
 
   function handleCancel() {
@@ -399,7 +436,11 @@ export default function Atividades() {
                           </div>
                           <div className="col-span-2 flex justify-center">
                             {isMobile ? (
-                              <div className={`h-6 w-6 rounded-full ${getNivelColor(atividade.nivel)}`} />
+                              <div 
+                                className={`h-6 w-6 rounded-full ${getNivelColor(atividade.nivel)}`}
+                                aria-label={`Nível: ${atividade.nivel}`}
+                                role="img"
+                              />
                             ) : (
                               <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
                                 atividade.nivel === 'Máximo'
@@ -449,20 +490,91 @@ export default function Atividades() {
       </Button>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar atividade</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Seleção de Bloco */}
+            <div className="grid gap-2">
+              <Label htmlFor="bloco">Bloco</Label>
+              <select
+                id="bloco"
+                value={blocoSelecionado}
+                onChange={(e) => setBlocoSelecionado(e.target.value)}
+                className="border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm"
+              >
+                <option value="">Selecione um bloco...</option>
+                {blocos.map((bloco) => (
+                  <option key={bloco} value={bloco}>
+                    Bloco {bloco}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Checkboxes de Locais */}
+            {blocoSelecionado && (
+              <div className="grid gap-2">
+                <Label>Locais (selecione pelo menos um)</Label>
+                <div className="grid grid-cols-2 gap-3 p-3 border rounded-md">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={locaisSelecionados.hall}
+                      onChange={() => toggleLocal("hall")}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm">Hall</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={locaisSelecionados.sala}
+                      onChange={() => toggleLocal("sala")}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm">Sala</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={locaisSelecionados.laboratorio}
+                      onChange={() => toggleLocal("laboratorio")}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm">Laboratório</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={locaisSelecionados.banheiros}
+                      onChange={() => toggleLocal("banheiros")}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-sm">Banheiros</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Descrição - só habilitada após selecionar bloco e locais */}
             <div className="grid gap-2">
               <Label htmlFor="descricao">Descrição</Label>
               <Input
                 id="descricao"
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
-                placeholder="Descreva a atividade"
+                placeholder={podeEscreverDescricao ? "Descreva a atividade" : "Selecione um bloco e pelo menos um local primeiro"}
+                disabled={!podeEscreverDescricao}
+                className={!podeEscreverDescricao ? "opacity-50 cursor-not-allowed" : ""}
               />
+              {!podeEscreverDescricao && (
+                <p className="text-xs text-muted-foreground">
+                  Selecione um bloco e pelo menos um local (hall, sala, laboratório ou banheiros) para habilitar a descrição.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -504,18 +616,19 @@ export default function Atividades() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Foto</Label>
+              <Label htmlFor="foto-input">Foto</Label>
               {photoPreview ? (
                 <div className="flex items-center gap-3">
                   <img src={photoPreview} alt="Prévia da foto" className="h-20 w-20 object-cover rounded-md border" />
-                  <Button variant="outline" size="sm" onClick={handleRemovePhoto}>
+                  <Button variant="outline" size="sm" onClick={handleRemovePhoto} aria-label="Remover foto">
                     <Trash2 /> Remover
                   </Button>
                 </div>
               ) : (
                 <div>
-                  <input id="foto-input" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                  <Button variant="outline" onClick={() => document.getElementById("foto-input")?.click()}>
+                  <input id="foto-input" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} aria-describedby="foto-descricao" />
+                  <span id="foto-descricao" className="sr-only">Adicione uma foto para a atividade</span>
+                  <Button variant="outline" onClick={() => document.getElementById("foto-input")?.click()} aria-label="Adicionar foto">
                     <Camera /> Adicionar foto
                   </Button>
                 </div>
@@ -523,10 +636,17 @@ export default function Atividades() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Localização</Label>
-              <Button variant="outline" onClick={handleUseCurrentLocation} disabled={isLocating}>
+              <Label htmlFor="localizacao-button">Localização</Label>
+              <Button 
+                id="localizacao-button"
+                variant="outline" 
+                onClick={handleUseCurrentLocation} 
+                disabled={isLocating}
+                aria-describedby="localizacao-descricao"
+              >
                 <MapPin /> {isLocating ? "Localizando..." : "Usar minha localização"}
               </Button>
+              <span id="localizacao-descricao" className="sr-only">Usa a localização atual do dispositivo para registrar a atividade</span>
             </div>
           </div>
 
@@ -544,76 +664,134 @@ export default function Atividades() {
             <DialogTitle>Detalhes da Atividade</DialogTitle>
           </DialogHeader>
           
-          {selectedActivity && (
-            <div className="space-y-4 py-2">
-              {/* Photo placeholder */}
-              <div className="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <Camera className="h-12 w-12 mx-auto mb-2" />
-                  <p>Foto da atividade</p>
+          {selectedActivity && (() => {
+            // Extrair bloco e locais do registro (mock de visualização)
+            // Exemplo: "Fiscalizando banheiro do segundo andar do bloco M"
+            const blocoMatch = selectedActivity.registro.match(/bloco\s+([A-Z])/i);
+            const bloco = blocoMatch ? blocoMatch[1].toUpperCase() : "Não informado";
+            
+            // Detectar locais mencionados no registro
+            const registroLower = selectedActivity.registro.toLowerCase();
+            const locaisDetectados = {
+              hall: registroLower.includes("hall"),
+              sala: registroLower.includes("sala") || registroLower.includes("salas"),
+              laboratorio: registroLower.includes("laboratório") || registroLower.includes("laboratorio"),
+              banheiros: registroLower.includes("banheiro") || registroLower.includes("banheiros"),
+            };
+            
+            return (
+              <div className="space-y-4 py-2">
+                {/* Photo placeholder */}
+                <div className="w-full h-48 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <div className="text-center text-gray-500">
+                    <Camera className="h-12 w-12 mx-auto mb-2" />
+                    <p>Foto da atividade</p>
+                  </div>
+                </div>
+                
+                {/* Activity details */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Funcionário:</span>
+                    <span>{selectedActivity.nome}</span>
+                  </div>
+                  
+                  {/* Bloco */}
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Bloco:</span>
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
+                      Bloco {bloco}
+                    </span>
+                  </div>
+                  
+                  {/* Locais */}
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Locais:</span>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {locaisDetectados.hall && (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">
+                          Hall
+                        </span>
+                      )}
+                      {locaisDetectados.sala && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium">
+                          Sala
+                        </span>
+                      )}
+                      {locaisDetectados.laboratorio && (
+                        <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-sm font-medium">
+                          Laboratório
+                        </span>
+                      )}
+                      {locaisDetectados.banheiros && (
+                        <span className="px-2 py-1 bg-pink-100 text-pink-800 rounded text-sm font-medium">
+                          Banheiros
+                        </span>
+                      )}
+                      {!locaisDetectados.hall && !locaisDetectados.sala && !locaisDetectados.laboratorio && !locaisDetectados.banheiros && (
+                        <span className="text-sm text-muted-foreground">Nenhum local específico detectado</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Descrição:</span>
+                    <span className="text-sm text-gray-600 text-right max-w-48">{selectedActivity.registro}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Nível:</span>
+                    {isMobile ? (
+                      <div 
+                        className={`h-6 w-6 rounded-full ${getNivelColor(selectedActivity.nivel)}`}
+                        aria-label={`Nível: ${selectedActivity.nivel}`}
+                        role="img"
+                      />
+                    ) : (
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        selectedActivity.nivel === 'Máximo'
+                          ? 'bg-red-100 text-red-800'
+                          : selectedActivity.nivel === 'Alto'
+                          ? 'bg-orange-100 text-orange-800'
+                          : selectedActivity.nivel === 'Normal'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {selectedActivity.nivel}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Status:</span>
+                    {isMobile ? (
+                      getStatusIcon(selectedActivity.status)
+                    ) : (
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        selectedActivity.status === 'Concluído'
+                          ? 'bg-green-100 text-green-800'
+                          : selectedActivity.status === 'Pendente'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {selectedActivity.status}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Data:</span>
+                    <span>{new Date().toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Hora:</span>
+                    <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
                 </div>
               </div>
-              
-              {/* Activity details */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Funcionário:</span>
-                  <span>{selectedActivity.nome}</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Descrição:</span>
-                  <span className="text-sm text-gray-600 text-right max-w-48">{selectedActivity.registro}</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Nível:</span>
-                  {isMobile ? (
-                    <div className={`h-6 w-6 rounded-full ${getNivelColor(selectedActivity.nivel)}`} />
-                  ) : (
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      selectedActivity.nivel === 'Máximo'
-                        ? 'bg-red-100 text-red-800'
-                        : selectedActivity.nivel === 'Alto'
-                        ? 'bg-orange-100 text-orange-800'
-                        : selectedActivity.nivel === 'Normal'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {selectedActivity.nivel}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Status:</span>
-                  {isMobile ? (
-                    getStatusIcon(selectedActivity.status)
-                  ) : (
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      selectedActivity.status === 'Concluído'
-                        ? 'bg-green-100 text-green-800'
-                        : selectedActivity.status === 'Pendente'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {selectedActivity.status}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Data:</span>
-                  <span>{new Date().toLocaleDateString('pt-BR')}</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Hora:</span>
-                  <span>{new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           
           <DialogFooter className="flex-row justify-between">
             <Button 
