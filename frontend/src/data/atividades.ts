@@ -1,5 +1,5 @@
 export type StatusAtividade = 'Pendente' | 'Concluído' | 'Não Concluído'
-export type NivelAtividade = 'Normal' | 'Máximo'
+export type NivelAtividade = 'Baixo' | 'Normal' | 'Alto' | 'Máximo'
 
 export type Atividade = {
   id: number
@@ -46,14 +46,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 3,
       nome: 'Ana Costa',
       registro: 'Limpeza da biblioteca central',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 4,
       nome: 'Carlos Oliveira',
       registro: 'Fiscalizando corredores do bloco A',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Não Concluído',
     }),
     withCoords({
@@ -69,6 +69,20 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       registro: 'Fiscalizando salas de aula do bloco E',
       nivel: 'Máximo',
       status: 'Concluído',
+    }),
+    withCoords({
+      id: 70,
+      nome: 'Paula Souza',
+      registro: 'Organização de documentos na secretaria',
+      nivel: 'Baixo',
+      status: 'Concluído',
+    }),
+    withCoords({
+      id: 71,
+      nome: 'Ricardo Costa',
+      registro: 'Monitoramento de segurança no estacionamento',
+      nivel: 'Alto',
+      status: 'Pendente',
     }),
   ],
   Ontem: [
@@ -90,14 +104,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 9,
       nome: 'Sandra Rodrigues',
       registro: 'Limpeza do auditório principal',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 10,
       nome: 'Marcos Pereira',
       registro: 'Fiscalizando corredores do bloco G',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Não Concluído',
     }),
     withCoords({
@@ -108,10 +122,24 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       status: 'Concluído',
     }),
     withCoords({
+      id: 72,
+      nome: 'Luciana Ferreira',
+      registro: 'Atendimento na recepção',
+      nivel: 'Baixo',
+      status: 'Concluído',
+    }),
+    withCoords({
       id: 12,
       nome: 'Antonio Silva',
       registro: 'Fiscalizando salas de aula do bloco I',
       nivel: 'Máximo',
+      status: 'Concluído',
+    }),
+    withCoords({
+      id: 73,
+      nome: 'Gabriel Martins',
+      registro: 'Supervisão de eventos no auditório',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
     withCoords({
@@ -125,14 +153,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 14,
       nome: 'Paulo Oliveira',
       registro: 'Fiscalizando banheiro do terceiro andar do bloco K',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
     withCoords({
       id: 15,
       nome: 'Rita Alves',
       registro: 'Limpeza da sala de professores do bloco L',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
@@ -176,14 +204,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 21,
       nome: 'Beatriz Santos',
       registro: 'Limpeza da sala de reuniões do bloco S',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 22,
       nome: 'Diego Oliveira',
       registro: 'Fiscalizando corredores do bloco T',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
     withCoords({
@@ -204,14 +232,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 25,
       nome: 'Camila Lima',
       registro: 'No laboratório de matemática do bloco W',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 26,
       nome: 'Gabriel Santos',
       registro: 'Fiscalizando banheiro do primeiro andar do bloco X',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
   ],
@@ -234,14 +262,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 29,
       nome: 'Eduardo Lima',
       registro: 'Verificação de extintores no corredor principal',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 30,
       nome: 'Larissa Souza',
       registro: 'Fiscalização do acesso ao bloco Z',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Não Concluído',
     }),
     withCoords({
@@ -264,7 +292,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 33,
       nome: 'Bruno Carvalho',
       registro: 'Limpeza de área comum no bloco C',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
@@ -278,7 +306,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 35,
       nome: 'Igor Menezes',
       registro: 'Ronda noturna nos corredores do bloco D',
-      nivel: 'Normal',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
     withCoords({
@@ -299,7 +327,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 38,
       nome: 'Pablo Nunes',
       registro: 'Acompanhamento de manutenção no bloco B',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Não Concluído',
     }),
   ],
@@ -308,7 +336,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 39,
       nome: 'Helena Araujo',
       registro: 'Organização de materiais na biblioteca',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
@@ -322,7 +350,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 41,
       nome: 'Marina Faria',
       registro: 'Fiscalização de equipamentos esportivos na quadra',
-      nivel: 'Normal',
+      nivel: 'Alto',
       status: 'Pendente',
     }),
     withCoords({
@@ -343,7 +371,7 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 44,
       nome: 'Leandro Souza',
       registro: 'Ronda nas áreas externas próximas ao bloco F',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
   ],
@@ -366,14 +394,14 @@ export const atividadesPorDia: Record<string, Atividade[]> = {
       id: 47,
       nome: 'Nathalia Queiroz',
       registro: 'Apoio em evento no auditório principal',
-      nivel: 'Normal',
+      nivel: 'Baixo',
       status: 'Concluído',
     }),
     withCoords({
       id: 48,
       nome: 'Otávio Barros',
       registro: 'Inspeção do laboratório de química',
-      nivel: 'Máximo',
+      nivel: 'Alto',
       status: 'Concluído',
     }),
     withCoords({

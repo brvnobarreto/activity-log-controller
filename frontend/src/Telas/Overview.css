@@ -1,0 +1,40 @@
+/* Define um grid flexível para os dashboards */
+.dashboard-grid {
+    display: grid;
+    /* 4 colunas de tamanho igual */
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem; /* Espaçamento entre os cards */
+    padding: 1.5rem;
+}
+
+/* --- Seção 1: KPI Cards --- */
+/* Cada KPI Card ocupa 1 coluna por padrão */
+
+/* --- Seção 2: Tendências --- */
+.chart-produtividade {
+    /* Ocupa 3 colunas de largura */
+    grid-column: span 3;
+}
+.chart-carga-trabalho {
+    /* Ocupa 1 coluna de largura */
+    grid-column: span 1;
+}
+
+/* --- Seção 3: Alertas --- */
+.list-locais-criticos {
+    /* Ocupa 2 colunas de largura */
+    grid-column: span 2;
+}
+.list-pendencias {
+    /* Ocupa 2 colunas de largura */
+    grid-column: span 2;
+}
+
+/* Estilo básico para os títulos das seções */
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    /* Ocupa a linha inteira do grid */
+    grid-column: 1 / -1; 
+}
