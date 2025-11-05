@@ -4,7 +4,7 @@ import { ProdutividadeChart } from '@/components/dashboard/ProdutividadeChart';
 import { AlertasList } from '@/components/dashboard/AlertasList';
 import { CargaTrabalhoChart } from '@/components/dashboard/CargaTrabalhoChart';
 
-// Importe os Dados Mockados
+// Importe os Dados Mockados  
 import { 
   mockProdutividadeSemanal, 
   mockCargaFiscal, // Agora este será usado ativamente

@@ -6,14 +6,45 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, MapPin, Plus, Trash2, MessageCircle } from "lucide-react";
+import { Camera, MapPin, Plus, Trash2, MessageCircle, CheckCircle, Clock, XCircle } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 function isNivelAtividade(value: string): value is NivelAtividade {
-  return value === "Normal" || value === "Máximo";
+  return value === "Baixo" || value === "Normal" || value === "Alto" || value === "Máximo";
 }
 
 function isStatusAtividade(value: string): value is StatusAtividade {
   return value === "Pendente" || value === "Concluído" || value === "Não Concluído";
+}
+
+// Função auxiliar para obter a cor do nível
+function getNivelColor(nivel: NivelAtividade): string {
+  switch (nivel) {
+    case 'Máximo':
+      return 'bg-red-500';
+    case 'Alto':
+      return 'bg-orange-500';
+    case 'Normal':
+      return 'bg-blue-500';
+    case 'Baixo':
+      return 'bg-green-500';
+    default:
+      return 'bg-gray-500';
+  }
+}
+
+// Função auxiliar para obter o ícone do status
+function getStatusIcon(status: StatusAtividade) {
+  switch (status) {
+    case 'Concluído':
+      return <CheckCircle className="h-5 w-5 text-green-600" />;
+    case 'Pendente':
+      return <Clock className="h-5 w-5 text-yellow-600" />;
+    case 'Não Concluído':
+      return <XCircle className="h-5 w-5 text-red-600" />;
+    default:
+      return null;
+  }
 }
 
 // Dados de teste para atividades por dia
@@ -209,6 +240,7 @@ function isStatusAtividade(value: string): value is StatusAtividade {
 }; */
 
 export default function Atividades() {
+  const isMobile = useIsMobile();
   const [dados, setDados] = useState<Record<string, Atividade[]>>(atividadesPorDia);
   const dias = Object.values(dados);
   const totalAtividades = dias.flat().length;
@@ -366,24 +398,36 @@ export default function Atividades() {
                             {atividade.registro}
                           </div>
                           <div className="col-span-2 flex justify-center">
-                            <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
-                              atividade.nivel === 'Máximo'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {atividade.nivel}
-                            </span>
+                            {isMobile ? (
+                              <div className={`h-6 w-6 rounded-full ${getNivelColor(atividade.nivel)}`} />
+                            ) : (
+                              <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                                atividade.nivel === 'Máximo'
+                                  ? 'bg-red-100 text-red-800'
+                                  : atividade.nivel === 'Alto'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : atividade.nivel === 'Normal'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {atividade.nivel}
+                              </span>
+                            )}
                           </div>
                           <div className="col-span-2 flex justify-center">
-                            <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
-                              atividade.status === 'Concluído'
-                                ? 'bg-green-100 text-green-800'
-                                : atividade.status === 'Pendente'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {atividade.status}
-                            </span>
+                            {isMobile ? (
+                              getStatusIcon(atividade.status)
+                            ) : (
+                              <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                                atividade.status === 'Concluído'
+                                  ? 'bg-green-100 text-green-800'
+                                  : atividade.status === 'Pendente'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {atividade.status}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -434,7 +478,9 @@ export default function Atividades() {
                   className="border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm"
                 >
                   <option value="">Selecione...</option>
+                  <option value="Baixo">Baixo</option>
                   <option value="Normal">Normal</option>
+                  <option value="Alto">Alto</option>
                   <option value="Máximo">Máximo</option>
                 </select>
               </div>
@@ -522,26 +568,38 @@ export default function Atividades() {
                 
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Nível:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    selectedActivity.nivel === 'Máximo'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {selectedActivity.nivel}
-                  </span>
+                  {isMobile ? (
+                    <div className={`h-6 w-6 rounded-full ${getNivelColor(selectedActivity.nivel)}`} />
+                  ) : (
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      selectedActivity.nivel === 'Máximo'
+                        ? 'bg-red-100 text-red-800'
+                        : selectedActivity.nivel === 'Alto'
+                        ? 'bg-orange-100 text-orange-800'
+                        : selectedActivity.nivel === 'Normal'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {selectedActivity.nivel}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="font-medium">Status:</span>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    selectedActivity.status === 'Concluído'
-                      ? 'bg-green-100 text-green-800'
-                      : selectedActivity.status === 'Pendente'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {selectedActivity.status}
-                  </span>
+                  {isMobile ? (
+                    getStatusIcon(selectedActivity.status)
+                  ) : (
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      selectedActivity.status === 'Concluído'
+                        ? 'bg-green-100 text-green-800'
+                        : selectedActivity.status === 'Pendente'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedActivity.status}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex justify-between items-center">
