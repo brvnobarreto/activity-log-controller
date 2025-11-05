@@ -47,198 +47,6 @@ function getStatusIcon(status: StatusAtividade) {
   }
 }
 
-// Dados de teste para atividades por dia
-/* const atividadesPorDia = {
-  "Hoje": [
-    {
-      id: 1,
-      nome: "Maria Silva",
-      registro: "Fiscalizando banheiro do segundo andar do bloco M",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 2,
-      nome: "João Santos",
-      registro: "No laboratório do bloco D",
-      nivel: "Máximo",
-      status: "Pendente"
-    },
-    {
-      id: 3,
-      nome: "Ana Costa",
-      registro: "Limpeza da biblioteca central",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 4,
-      nome: "Carlos Oliveira",
-      registro: "Fiscalizando corredores do bloco A",
-      nivel: "Máximo",
-      status: "Não Concluído"
-    },
-    {
-      id: 5,
-      nome: "Fernanda Lima",
-      registro: "No refeitório do bloco C",
-      nivel: "Normal",
-      status: "Pendente"
-    },
-    {
-      id: 6,
-      nome: "Roberto Alves",
-      registro: "Fiscalizando salas de aula do bloco E",
-      nivel: "Máximo",
-      status: "Concluído"
-    }
-  ],
-  "Ontem": [
-    {
-      id: 7,
-      nome: "Patricia Mendes",
-      registro: "Fiscalizando banheiro do primeiro andar do bloco B",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 8,
-      nome: "Lucas Ferreira",
-      registro: "No laboratório de química do bloco F",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 9,
-      nome: "Sandra Rodrigues",
-      registro: "Limpeza do auditório principal",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 10,
-      nome: "Marcos Pereira",
-      registro: "Fiscalizando corredores do bloco G",
-      nivel: "Máximo",
-      status: "Não Concluído"
-    },
-    {
-      id: 11,
-      nome: "Carla Santos",
-      registro: "No refeitório do bloco H",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 12,
-      nome: "Antonio Silva",
-      registro: "Fiscalizando salas de aula do bloco I",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 13,
-      nome: "Lucia Costa",
-      registro: "No laboratório de informática do bloco J",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 14,
-      nome: "Paulo Oliveira",
-      registro: "Fiscalizando banheiro do terceiro andar do bloco K",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 15,
-      nome: "Rita Alves",
-      registro: "Limpeza da sala de professores do bloco L",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 16,
-      nome: "Jose Santos",
-      registro: "No refeitório do bloco N",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 17,
-      nome: "Teresa Lima",
-      registro: "Fiscalizando corredores do bloco O",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 18,
-      nome: "Pedro Costa",
-      registro: "No laboratório de física do bloco P",
-      nivel: "Máximo",
-      status: "Concluído"
-    }
-  ],
-  "Anteontem": [
-    {
-      id: 19,
-      nome: "Claudia Mendes",
-      registro: "Fiscalizando banheiro do segundo andar do bloco Q",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 20,
-      nome: "Rafael Silva",
-      registro: "No laboratório de biologia do bloco R",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 21,
-      nome: "Beatriz Santos",
-      registro: "Limpeza da sala de reuniões do bloco S",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 22,
-      nome: "Diego Oliveira",
-      registro: "Fiscalizando corredores do bloco T",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 23,
-      nome: "Juliana Costa",
-      registro: "No refeitório do bloco U",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 24,
-      nome: "Felipe Alves",
-      registro: "Fiscalizando salas de aula do bloco V",
-      nivel: "Máximo",
-      status: "Concluído"
-    },
-    {
-      id: 25,
-      nome: "Camila Lima",
-      registro: "No laboratório de matemática do bloco W",
-      nivel: "Normal",
-      status: "Concluído"
-    },
-    {
-      id: 26,
-      nome: "Gabriel Santos",
-      registro: "Fiscalizando banheiro do primeiro andar do bloco X",
-      nivel: "Máximo",
-      status: "Concluído"
-    }
-  ]
-}; */
-
 export default function Atividades() {
   const isMobile = useIsMobile();
   const [dados, setDados] = useState<Record<string, Atividade[]>>(atividadesPorDia);
@@ -490,12 +298,12 @@ export default function Atividades() {
       </Button>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-2rem)] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Adicionar atividade</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 mt-4 mb-4">
             {/* Seleção de Bloco */}
             <div className="grid gap-2">
               <Label htmlFor="bloco">Bloco</Label>
@@ -615,38 +423,41 @@ export default function Atividades() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="foto-input">Foto</Label>
-              {photoPreview ? (
-                <div className="flex items-center gap-3">
-                  <img src={photoPreview} alt="Prévia da foto" className="h-20 w-20 object-cover rounded-md border" />
-                  <Button variant="outline" size="sm" onClick={handleRemovePhoto} aria-label="Remover foto">
-                    <Trash2 /> Remover
-                  </Button>
-                </div>
-              ) : (
-                <div>
-                  <input id="foto-input" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} aria-describedby="foto-descricao" />
-                  <span id="foto-descricao" className="sr-only">Adicione uma foto para a atividade</span>
-                  <Button variant="outline" onClick={() => document.getElementById("foto-input")?.click()} aria-label="Adicionar foto">
-                    <Camera /> Adicionar foto
-                  </Button>
-                </div>
-              )}
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="foto-input">Foto</Label>
+                {photoPreview ? (
+                  <div className="flex items-center gap-3">
+                    <img src={photoPreview} alt="Prévia da foto" className="h-20 w-20 object-cover rounded-md border" />
+                    <Button variant="outline" size="sm" onClick={handleRemovePhoto} aria-label="Remover foto">
+                      <Trash2 /> Remover
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <input id="foto-input" type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} aria-describedby="foto-descricao" />
+                    <span id="foto-descricao" className="sr-only">Adicione uma foto para a atividade</span>
+                    <Button variant="outline" className="w-full" onClick={() => document.getElementById("foto-input")?.click()} aria-label="Adicionar foto">
+                      <Camera /> Adicionar foto
+                    </Button>
+                  </>
+                )}
+              </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="localizacao-button">Localização</Label>
-              <Button 
-                id="localizacao-button"
-                variant="outline" 
-                onClick={handleUseCurrentLocation} 
-                disabled={isLocating}
-                aria-describedby="localizacao-descricao"
-              >
-                <MapPin /> {isLocating ? "Localizando..." : "Usar minha localização"}
-              </Button>
-              <span id="localizacao-descricao" className="sr-only">Usa a localização atual do dispositivo para registrar a atividade</span>
+              <div className="grid gap-2">
+                <Label htmlFor="localizacao-button">Localização</Label>
+                <Button 
+                  id="localizacao-button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleUseCurrentLocation} 
+                  disabled={isLocating}
+                  aria-describedby="localizacao-descricao"
+                >
+                  <MapPin /> {isLocating ? "Localizando..." : "Usar minha localização"}
+                </Button>
+                <span id="localizacao-descricao" className="sr-only">Usa a localização atual do dispositivo para registrar a atividade</span>
+              </div>
             </div>
           </div>
 
