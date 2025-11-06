@@ -17,17 +17,14 @@
  * - Valida dados de entrada
  * - Interage diretamente com Firebase (Firestore)
  * - Gera tokens JWT
- * - Gerencia sessões e blacklist
+ * - Gerencia sessões
  * - Retorna respostas JSON
- * 
- * Nota: Firebase Firestore é NoSQL (sem schemas rígidos).
- * Cada documento é um objeto JSON que pode ter campos diferentes.
  */
 
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { db, auth } from '../config/firebase.js';
+import { db, auth, FieldValue } from '../config/firebase.js';
 import { generateToken, decodeTokenFull } from '../utils/jwt.js';
 
 // ============================================
@@ -48,12 +45,6 @@ function generateUID(email: string): string {
 // Gerar ID de sessão
 function generateSessionId(): string {
   return crypto.randomBytes(16).toString('hex');
-}
-
-// Hash de token para blacklist
-async function hashToken(token: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return await bcrypt.hash(token, salt);
 }
 
 // Pegar informações da requisição
@@ -140,8 +131,8 @@ export async function register(req: Request, res: Response) {
       password: hashedPassword,
       name: name.trim(),
       provider: 'email',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     await userRef.set(userData);
@@ -219,23 +210,21 @@ export async function login(req: Request, res: Response) {
 
     // Criar sessão
     const sessionId = generateSessionId();
-    const tokenHash = await hashToken(token);
     const { ipAddress, userAgent } = getRequestInfo(req);
 
     await db.collection('sessions').doc(sessionId).set({
       sessionId,
       uid: user.uid,
       email: user.email,
-      token: tokenHash,
-      createdAt: new Date(),
-      lastActivity: new Date(),
+      createdAt: FieldValue.serverTimestamp(),
+      lastActivity: FieldValue.serverTimestamp(),
       ipAddress,
       userAgent,
       isActive: true,
     });
 
     // Atualizar último login
-    await userRef.update({ updatedAt: new Date() });
+    await userRef.update({ updatedAt: FieldValue.serverTimestamp() });
 
     // Retornar resposta
     return res.status(200).json({
@@ -289,8 +278,8 @@ export async function loginWithGoogle(req: Request, res: Response) {
         name: decodedToken.name || '',
         picture: decodedToken.picture,
         provider: 'google',
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
 
       await db.collection('users').doc(decodedToken.email?.toLowerCase() || decodedToken.uid).set(userData);
@@ -300,7 +289,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
       await user.docs[0].ref.update({
         name: decodedToken.name || userData.name,
         picture: decodedToken.picture || userData.picture,
-        updatedAt: new Date(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
       userData = { ...userData, ...decodedToken };
     }
@@ -344,41 +333,11 @@ export async function logout(req: Request, res: Response) {
       return res.status(400).json({ error: 'Token não fornecido' });
     }
 
-    // Decodificar token
+    // Decodificar token para obter dados do usuário
     const tokenData = decodeTokenFull(token);
     const { uid, email } = tokenData;
 
-    // Verificar se token está na blacklist
-    const tokenHash = await hashToken(token);
-    const blacklistRef = db.collection('tokenBlacklist');
-    const snapshot = await blacklistRef.get();
-
-    if (!snapshot.empty) {
-      for (const doc of snapshot.docs) {
-        const blacklistData = doc.data();
-        if (blacklistData.token && await bcrypt.compare(token, blacklistData.token)) {
-          return res.status(401).json({ error: 'Token já foi invalidado' });
-        }
-      }
-    }
-
-    // Adicionar token à blacklist
-    const expiresAt = tokenData.exp
-      ? new Date(tokenData.exp * 1000)
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    const docId = crypto.createHash('sha256').update(tokenHash).digest('hex').substring(0, 32);
-
-    await blacklistRef.doc(docId).set({
-      token: tokenHash,
-      uid,
-      email,
-      expiresAt,
-      blacklistedAt: new Date(),
-      reason: 'logout',
-    });
-
-    // Invalidar todas as sessões do usuário
+    // Invalidar todas as sessões ativas do usuário
     const sessionsRef = db.collection('sessions');
     const activeSessions = await sessionsRef
       .where('uid', '==', uid)
@@ -389,7 +348,7 @@ export async function logout(req: Request, res: Response) {
     activeSessions.forEach((doc) => {
       batch.update(doc.ref, {
         isActive: false,
-        invalidatedAt: new Date(),
+        invalidatedAt: FieldValue.serverTimestamp(),
       });
     });
     await batch.commit();

@@ -40,5 +40,7 @@ if (!admin.apps.length) {
 export const db = admin.firestore();
 // Exportar Firebase Auth (autenticação)
 export const auth = admin.auth();
+// Exportar FieldValue para usar serverTimestamp()
+export const FieldValue = admin.firestore.FieldValue;
 
 export default admin;
