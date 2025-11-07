@@ -47,6 +47,59 @@ function getStatusIcon(status: StatusAtividade) {
   }
 }
 
+type LocalOption = {
+  id: string;
+  nome: string;
+  termos: string[];
+};
+
+function buildLocalOption(id: string, nome: string, extraTerms: string[] = []): LocalOption {
+  const normalized = id.replace(/_/g, " ");
+  const normalizedNoSpaces = normalized.replace(/\s+/g, "");
+  const baseTerms = [nome.toLowerCase(), normalized, normalizedNoSpaces, ...extraTerms.map((term) => term.toLowerCase())]
+    .filter(Boolean);
+  const termos = Array.from(new Set(baseTerms));
+  return { id, nome, termos };
+}
+
+const blocosDisponiveis = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "T", "X", "Z"];
+
+const areasDisponiveis: LocalOption[] = [
+  buildLocalOption("reitoria", "Reitoria"),
+  buildLocalOption("espaco_cultura", "Espaço Cultura Unifor", ["espaco cultura"]),
+  buildLocalOption("vice_extensao", "Vice Reitoria de Extensão", ["vice reitoria de extensao"]),
+  buildLocalOption("vice_graduacao", "Vice Reitoria de Graduação", ["vice reitoria de graduacao"]),
+  buildLocalOption("sucesso_aluno", "Sucesso do Aluno"),
+  buildLocalOption("biblioteca", "Biblioteca"),
+  buildLocalOption("teatro_celina", "Teatro Celina Queiroz", ["teatro celina"]),
+  buildLocalOption("centro_convivencia", "Centro de Convivência", ["centro de convivencia"]),
+  buildLocalOption("ginasio", "Ginásio Poliesportivo", ["ginasio", "ginásio"]),
+  buildLocalOption("divisao_esportes", "Divisão de Atividades Desportivas", ["divisao de atividades desportivas"]),
+  buildLocalOption("clinica_odontologia", "Clínica Integrada de Odontologia", ["clinica integrada de odontologia"]),
+  buildLocalOption("prefeitura", "Prefeitura"),
+  buildLocalOption("academia", "Academia Unifor", ["academia"]),
+  buildLocalOption("escritorio_juridico", "Escritório de Prática Jurídica", ["escritorio de pratica juridica"]),
+  buildLocalOption("nami", "Núcleo de Atenção Médica Integrada (NAMI)", ["nucleo de atencao medica integrada", "nami"]),
+  buildLocalOption("pos_graduacao", "Pós-Graduação", ["pos graduacao"]),
+  buildLocalOption("painel_solar", "Painéis Solares", ["painel solar"]),
+  buildLocalOption("auditorio", "Auditório", ["auditorio"]),
+  buildLocalOption("estacionamento", "Estacionamento"),
+];
+
+const subLocaisDisponiveis: LocalOption[] = [
+  buildLocalOption("laboratorio", "Laboratório", ["laboratorio", "laboratorios", "laboratórios"]),
+  buildLocalOption("corredor", "Corredor"),
+  buildLocalOption("area_externa", "Área Externa", ["area externa"]),
+  buildLocalOption("sala_aula", "Sala de Aula", ["sala de aula", "salas de aula", "sala", "salas"]),
+];
+
+const locaisDisponiveis: LocalOption[] = [
+  ...blocosDisponiveis.map((bloco) =>
+    buildLocalOption(`bloco_${bloco.toLowerCase()}`, `Bloco ${bloco}`, [`bloco ${bloco.toLowerCase()}`, `bloco ${bloco}`])
+  ),
+  ...areasDisponiveis,
+];
+
 export default function Atividades() {
   const isMobile = useIsMobile();
   const [dados, setDados] = useState<Record<string, Atividade[]>>(atividadesPorDia);
@@ -63,33 +116,21 @@ export default function Atividades() {
   const [isLocating, setIsLocating] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   
-  // Estados para bloco e locais
-  const [blocoSelecionado, setBlocoSelecionado] = useState<string>("");
-  const [locaisSelecionados, setLocaisSelecionados] = useState<{
-    hall: boolean;
-    sala: boolean;
-    laboratorio: boolean;
-    banheiros: boolean;
-  }>({
-    hall: false,
-    sala: false,
-    laboratorio: false,
-    banheiros: false,
-  });
+  // Estados para local e sublocais
+  const [localSelecionado, setLocalSelecionado] = useState<string>("");
+  const [subLocaisSelecionados, setSubLocaisSelecionados] = useState<Record<string, boolean>>(
+    subLocaisDisponiveis.reduce((acc, local) => ({ ...acc, [local.id]: false }), {})
+  );
   
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Atividade | null>(null);
-
-  // Lista de blocos disponíveis
-  const blocos = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
   
-  // Verifica se pelo menos um local foi selecionado
-  const temLocalSelecionado = locaisSelecionados.hall || locaisSelecionados.sala || locaisSelecionados.laboratorio || locaisSelecionados.banheiros;
+  const temSubLocalSelecionado = Object.values(subLocaisSelecionados).some((selecionado) => selecionado);
   
-  // A descrição só pode ser editada se bloco e pelo menos um local estiverem selecionados
-  const podeEscreverDescricao = blocoSelecionado !== "" && temLocalSelecionado;
+  // A descrição só pode ser editada se local e pelo menos um sublocal estiverem selecionados
+  const podeEscreverDescricao = localSelecionado !== "" && temSubLocalSelecionado;
   
-  const canSave = descricao.trim() !== "" && nivel !== "" && status !== "" && blocoSelecionado !== "" && temLocalSelecionado;
+  const canSave = descricao.trim() !== "" && nivel !== "" && status !== "" && localSelecionado !== "" && temSubLocalSelecionado;
 
   function openAddDialog() {
     setDescricao("");
@@ -98,20 +139,17 @@ export default function Atividades() {
     setLat("");
     setLng("");
     setPhotoPreview(null);
-    setBlocoSelecionado("");
-    setLocaisSelecionados({
-      hall: false,
-      sala: false,
-      laboratorio: false,
-      banheiros: false,
-    });
+    setLocalSelecionado("");
+    setSubLocaisSelecionados(
+      subLocaisDisponiveis.reduce((acc, local) => ({ ...acc, [local.id]: false }), {})
+    );
     setIsDialogOpen(true);
   }
-  
-  function toggleLocal(local: keyof typeof locaisSelecionados) {
-    setLocaisSelecionados((prev) => ({
+
+  function toggleSubLocal(localId: string) {
+    setSubLocaisSelecionados((prev) => ({
       ...prev,
-      [local]: !prev[local],
+      [localId]: !prev[localId],
     }));
   }
 
@@ -169,10 +207,18 @@ export default function Atividades() {
     const all: Atividade[] = Object.values(dados).flat();
     const nextId = all.length ? Math.max(...all.map((a) => a.id)) + 1 : 1;
 
+    const localPrincipal = locaisDisponiveis.find((local) => local.id === localSelecionado);
+    const subLocaisAtivos = subLocaisDisponiveis.filter((subLocal) => subLocaisSelecionados[subLocal.id]);
+    const prefixParts = [localPrincipal?.nome, ...subLocaisAtivos.map((subLocal) => subLocal.nome)].filter(Boolean);
+    const descricaoTrim = descricao.trim();
+    const descricaoComLocal = prefixParts.length
+      ? `${prefixParts.join(" - ")} - ${descricaoTrim}`
+      : descricaoTrim;
+
     const novaAtividade: Atividade = {
       id: nextId,
       nome: "Usuário",
-      registro: descricao,
+      registro: descricaoComLocal,
       nivel: (nivel || "Normal") as NivelAtividade,
       status: (status || "Pendente") as StatusAtividade,
       lat: typeof lat === "number" ? lat : 0,
@@ -304,83 +350,58 @@ export default function Atividades() {
           </DialogHeader>
 
           <div className="space-y-4 py-2 mt-4 mb-4">
-            {/* Seleção de Bloco */}
+            {/* Seleção de Local */}
             <div className="grid gap-2">
-              <Label htmlFor="bloco">Bloco</Label>
+              <Label htmlFor="local">Local</Label>
               <select
-                id="bloco"
-                value={blocoSelecionado}
-                onChange={(e) => setBlocoSelecionado(e.target.value)}
+                id="local"
+                value={localSelecionado}
+                onChange={(e) => setLocalSelecionado(e.target.value)}
                 className="border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm"
               >
-                <option value="">Selecione um bloco...</option>
-                {blocos.map((bloco) => (
-                  <option key={bloco} value={bloco}>
-                    Bloco {bloco}
+                <option value="">Selecione um local...</option>
+                {locaisDisponiveis.map((local) => (
+                  <option key={local.id} value={local.id}>
+                    {local.nome}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Checkboxes de Locais */}
-            {blocoSelecionado && (
+            {/* Seleção de Sub-locais */}
+            {localSelecionado && (
               <div className="grid gap-2">
-                <Label>Locais (selecione pelo menos um)</Label>
-                <div className="grid grid-cols-2 gap-3 p-3 border rounded-md">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={locaisSelecionados.hall}
-                      onChange={() => toggleLocal("hall")}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <span className="text-sm">Hall</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={locaisSelecionados.sala}
-                      onChange={() => toggleLocal("sala")}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <span className="text-sm">Sala</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={locaisSelecionados.laboratorio}
-                      onChange={() => toggleLocal("laboratorio")}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <span className="text-sm">Laboratório</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={locaisSelecionados.banheiros}
-                      onChange={() => toggleLocal("banheiros")}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <span className="text-sm">Banheiros</span>
-                  </label>
+                <Label>Sub-locais (selecione pelo menos um)</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 border rounded-md max-h-60 overflow-y-auto">
+                  {subLocaisDisponiveis.map((subLocal) => (
+                    <label key={subLocal.id} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={subLocaisSelecionados[subLocal.id] || false}
+                        onChange={() => toggleSubLocal(subLocal.id)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="text-sm">{subLocal.nome}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Descrição - só habilitada após selecionar bloco e locais */}
+            {/* Descrição - só habilitada após selecionar local */}
             <div className="grid gap-2">
               <Label htmlFor="descricao">Descrição</Label>
               <Input
                 id="descricao"
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
-                placeholder={podeEscreverDescricao ? "Descreva a atividade" : "Selecione um bloco e pelo menos um local primeiro"}
+                placeholder={podeEscreverDescricao ? "Descreva a atividade" : "Selecione um local e pelo menos um sub-local"}
                 disabled={!podeEscreverDescricao}
                 className={!podeEscreverDescricao ? "opacity-50 cursor-not-allowed" : ""}
               />
               {!podeEscreverDescricao && (
                 <p className="text-xs text-muted-foreground">
-                  Selecione um bloco e pelo menos um local (hall, sala, laboratório ou banheiros) para habilitar a descrição.
+                  Selecione um local e pelo menos um sub-local para habilitar a descrição.
                 </p>
               )}
             </div>
@@ -476,19 +497,14 @@ export default function Atividades() {
           </DialogHeader>
           
           {selectedActivity && (() => {
-            // Extrair bloco e locais do registro (mock de visualização)
-            // Exemplo: "Fiscalizando banheiro do segundo andar do bloco M"
-            const blocoMatch = selectedActivity.registro.match(/bloco\s+([A-Z])/i);
-            const bloco = blocoMatch ? blocoMatch[1].toUpperCase() : "Não informado";
-            
-            // Detectar locais mencionados no registro
+            // Detectar local e sub-locais mencionados no registro
             const registroLower = selectedActivity.registro.toLowerCase();
-            const locaisDetectados = {
-              hall: registroLower.includes("hall"),
-              sala: registroLower.includes("sala") || registroLower.includes("salas"),
-              laboratorio: registroLower.includes("laboratório") || registroLower.includes("laboratorio"),
-              banheiros: registroLower.includes("banheiro") || registroLower.includes("banheiros"),
-            };
+            const localDetectado = locaisDisponiveis.find((local) =>
+              local.termos.some((termo) => registroLower.includes(termo))
+            );
+            const subLocaisDetectados = subLocaisDisponiveis.filter((subLocal) =>
+              subLocal.termos.some((termo) => registroLower.includes(termo))
+            );
             
             return (
               <div className="space-y-4 py-2">
@@ -507,40 +523,30 @@ export default function Atividades() {
                     <span>{selectedActivity.nome}</span>
                   </div>
                   
-                  {/* Bloco */}
+                  {/* Local */}
                   <div className="flex justify-between items-center">
-                    <span className="font-medium">Bloco:</span>
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                      Bloco {bloco}
-                    </span>
+                    <span className="font-medium">Local:</span>
+                    {localDetectado ? (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
+                        {localDetectado.nome}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Nenhum local específico detectado</span>
+                    )}
                   </div>
-                  
-                  {/* Locais */}
+
+                  {/* Sub-locais */}
                   <div className="flex justify-between items-center">
-                    <span className="font-medium">Locais:</span>
+                    <span className="font-medium">Sub-locais:</span>
                     <div className="flex flex-wrap gap-2 justify-end">
-                      {locaisDetectados.hall && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">
-                          Hall
-                        </span>
-                      )}
-                      {locaisDetectados.sala && (
-                        <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium">
-                          Sala
-                        </span>
-                      )}
-                      {locaisDetectados.laboratorio && (
-                        <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-sm font-medium">
-                          Laboratório
-                        </span>
-                      )}
-                      {locaisDetectados.banheiros && (
-                        <span className="px-2 py-1 bg-pink-100 text-pink-800 rounded text-sm font-medium">
-                          Banheiros
-                        </span>
-                      )}
-                      {!locaisDetectados.hall && !locaisDetectados.sala && !locaisDetectados.laboratorio && !locaisDetectados.banheiros && (
-                        <span className="text-sm text-muted-foreground">Nenhum local específico detectado</span>
+                      {subLocaisDetectados.length > 0 ? (
+                        subLocaisDetectados.map((subLocal) => (
+                          <span key={subLocal.id} className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-sm font-medium">
+                            {subLocal.nome}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Nenhum sub-local detectado</span>
                       )}
                     </div>
                   </div>
