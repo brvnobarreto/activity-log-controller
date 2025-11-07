@@ -23,6 +23,8 @@ import crypto from 'crypto';
 import { db, auth, FieldValue } from '../config/firebase.js';
 import { generateToken, decodeTokenFull } from '../utils/jwt.js';
 
+const DEFAULT_ROLE = 'fiscal';
+
 // ============================================
 // FUNÇÕES HELPER SIMPLES
 // ============================================
@@ -129,6 +131,7 @@ export async function register(req: Request, res: Response) {
       email: emailLower,
       name: name.trim(),
       provider: 'email',
+      role: DEFAULT_ROLE,
       emailVerified: firebaseUser.emailVerified,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -141,6 +144,7 @@ export async function register(req: Request, res: Response) {
         email: emailLower,
         name: name.trim(),
         provider: 'email',
+        role: DEFAULT_ROLE,
         emailVerified: firebaseUser.emailVerified,
       },
     });
@@ -198,6 +202,7 @@ export async function login(req: Request, res: Response) {
           email,
           name: firebaseUser.displayName || '',
           provider: firebaseUser.providerData[0]?.providerId || 'email',
+          role: DEFAULT_ROLE,
         };
 
     // Garantir que o documento existe/esteja atualizado
@@ -209,6 +214,7 @@ export async function login(req: Request, res: Response) {
         picture: profileData?.picture || firebaseUser.photoURL || '',
         provider: profileData?.provider || 'email',
         emailVerified: true,
+        role: profileData?.role || DEFAULT_ROLE,
         updatedAt: FieldValue.serverTimestamp(),
         lastLoginAt: FieldValue.serverTimestamp(),
       },
@@ -244,6 +250,7 @@ export async function login(req: Request, res: Response) {
         picture: profileData?.picture || firebaseUser.photoURL || undefined,
         provider: profileData?.provider || 'email',
         emailVerified: true,
+        role: profileData?.role || DEFAULT_ROLE,
       },
     });
   } catch (error) {
@@ -289,6 +296,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         emailVerified: true,
+        role: DEFAULT_ROLE,
       };
 
       await db.collection('users').doc(decodedToken.email?.toLowerCase() || decodedToken.uid).set(userData);
@@ -300,9 +308,11 @@ export async function loginWithGoogle(req: Request, res: Response) {
         picture: decodedToken.picture || userData.picture,
         updatedAt: FieldValue.serverTimestamp(),
         emailVerified: true,
+        role: userData.role || DEFAULT_ROLE,
       });
       userData = { ...userData, ...decodedToken };
       userData.emailVerified = true;
+      userData.role = userData.role || DEFAULT_ROLE;
     }
 
     // Gerar token JWT
@@ -322,6 +332,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
         picture: userData.picture,
         provider: 'google',
         emailVerified: true,
+        role: userData.role || DEFAULT_ROLE,
       },
     });
   } catch (error) {
@@ -410,7 +421,7 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
           picture: firebaseUser.photoURL || '',
           provider: firebaseUser.providerData[0]?.providerId || 'email',
           emailVerified: firebaseUser.emailVerified ?? true,
-          role: 'Usuário',
+          role: DEFAULT_ROLE,
         };
         await userRef.set({
           ...profile,
@@ -425,7 +436,7 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
           picture: '',
           provider: 'email',
           emailVerified: true,
-          role: 'Usuário',
+          role: DEFAULT_ROLE,
         };
       }
     } else {
@@ -436,7 +447,7 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
         picture: profile.picture || '',
         provider: profile.provider || 'email',
         emailVerified: profile.emailVerified ?? true,
-        role: profile.role || 'Usuário',
+        role: profile.role || DEFAULT_ROLE,
       };
     }
 

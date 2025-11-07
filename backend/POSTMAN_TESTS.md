@@ -104,3 +104,4 @@ if (pm.response.code === 200) {
 - Os e-mails de verificação e redefinição são enviados pelo próprio Firebase Authentication.
 - Personalize os templates no console do Firebase (Authentication → Templates) para alterar textos e links.
 - O backend ainda emite seu próprio JWT (`token`) para ser usado pelas rotas protegidas (ex.: `/api/auth/me`).
+- Usuários são criados com o papel `fiscal`. Para promover a `supervisor`, edite o campo `role` do documento no Firestore.

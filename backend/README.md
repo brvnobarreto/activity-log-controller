@@ -17,6 +17,7 @@ JWT_EXPIRES_IN=7d
 
 > O envio de emails de verificação e recuperação fica inteiramente a cargo do Firebase Authentication.
 > Use as templates do console para personalizar os textos e links.
+> Usuários cadastrados começam com o papel `fiscal`. Atualize o campo `role` no Firestore/Firebase para promover a `supervisor`.
 
 ## Endpoints principais
 
