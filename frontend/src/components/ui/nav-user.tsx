@@ -36,8 +36,8 @@ interface NavUserProps {
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar();
 
-  const displayName = user?.name || "Usuário";
   const displayEmail = user?.email || "";
+  const displayName = user?.name || (displayEmail ? displayEmail.split("@")[0] : "Usuário");
   const initials = displayName
     .split(" ")
     .map((part) => part.charAt(0).toUpperCase())
@@ -70,14 +70,9 @@ export function NavUser({ user }: NavUserProps) {
             sideOffset={4}
           >
             <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary/10 text-primary">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{displayName}</span>
-                  <span className="truncate text-xs">{displayEmail}</span>
-                </div>
+              <div className="grid gap-0.5 px-1 py-1.5 text-left text-sm">
+                <span className="truncate font-medium">{displayName}</span>
+                <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
