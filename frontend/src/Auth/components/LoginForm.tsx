@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { auth, googleProvider } from "@/lib/firebase"
+import { saveSession } from "../utils/sessionStorage"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
   onSuccess?: () => void
@@ -60,10 +61,17 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
         body: JSON.stringify({ idToken }),
       })
 
+      const data = await response.json().catch(() => ({}))
+
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
         throw new Error(data.error || "Não foi possível completar o login.")
       }
+
+      saveSession({
+        token: data.token,
+        sessionId: data.sessionId,
+        user: data.user,
+      })
 
       setFeedback("Login realizado com sucesso!")
       onSuccess?.()
@@ -119,10 +127,17 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
         body: JSON.stringify({ idToken }),
       })
 
+      const data = await response.json().catch(() => ({}))
+
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
         throw new Error(data.error || "Não foi possível completar o login.")
       }
+
+      saveSession({
+        token: data.token,
+        sessionId: data.sessionId,
+        user: data.user,
+      })
 
       setFeedback("Login com Google realizado com sucesso!")
       onGoogleSuccess?.()
