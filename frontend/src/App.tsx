@@ -13,14 +13,13 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       {
-        path: "/",
         element: <AppLayout />,
         children: [
-          { index: true, element: <Dashboard /> },
-          { path: "dashboard", element: <Dashboard /> },
-          { path: "funcionario", element: <Funcionario /> },
-          { path: "relatorios", element: <Relatorios /> },
-          { path: "campus", element: <Campus /> },
+          { path: "/", element: <Dashboard /> },
+          { path: "/dashboard", element: <Dashboard /> },
+          { path: "/funcionario", element: <Funcionario /> },
+          { path: "/relatorios", element: <Relatorios /> },
+          { path: "/campus", element: <Campus /> },
         ],
       },
     ],
