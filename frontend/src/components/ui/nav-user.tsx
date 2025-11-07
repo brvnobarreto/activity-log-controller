@@ -24,6 +24,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/Auth/context/AuthContext"
+import { useNavigate } from "react-router-dom"
 
 interface NavUserProps {
   user?: {
@@ -35,6 +37,8 @@ interface NavUserProps {
 
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar();
+  const { signOutUser } = useAuth()
+  const navigate = useNavigate()
 
   const displayEmail = user?.email || "";
   const displayName = user?.name || (displayEmail ? displayEmail.split("@")[0] : "Usuário");
@@ -43,6 +47,11 @@ export function NavUser({ user }: NavUserProps) {
     .map((part) => part.charAt(0).toUpperCase())
     .slice(0, 2)
     .join("") || "U";
+
+  const handleLogout = async () => {
+    await signOutUser()
+    navigate("/login", { replace: true })
+  }
 
   return (
     <SidebarMenu className="p-2 gap-2">
@@ -91,7 +100,7 @@ export function NavUser({ user }: NavUserProps) {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />          
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleLogout}>
               <LogOut />
               Sair
             </DropdownMenuItem>
