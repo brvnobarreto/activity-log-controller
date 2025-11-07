@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import type { User } from "firebase/auth"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import axios from "axios"
@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe()
   }, [])
 
-  const refreshSessionUser = async () => {
+  const refreshSessionUser = useCallback(async () => {
     const token = getSessionToken()
     if (!token) {
       setSessionUser(null)
@@ -72,14 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       clearSession()
       setSessionUser(null)
     }
-  }
+  }, [apiBaseUrl])
 
   useEffect(() => {
     if (!firebaseUser) return
     refreshSessionUser()
-  }, [firebaseUser])
+  }, [firebaseUser, refreshSessionUser])
 
-  const signOutUser = async () => {
+  const signOutUser = useCallback(async () => {
     const token = getSessionToken()
     try {
       if (token) {
@@ -101,16 +101,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFirebaseUser(null)
       setSessionUser(null)
     }
-  }
+  }, [apiBaseUrl])
 
   const value = useMemo<AuthContextValue>(
     () => ({ firebaseUser, sessionUser, loading, signOutUser, refreshSessionUser }),
-    [firebaseUser, sessionUser, loading]
+    [firebaseUser, sessionUser, loading, signOutUser, refreshSessionUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext)
   if (!context) {
