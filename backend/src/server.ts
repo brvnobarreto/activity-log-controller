@@ -21,6 +21,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import morgan from "morgan";
 import authRoutes from "./routes/authRoutes.js";
 
 // Carregar variáveis de ambiente do arquivo .env
@@ -32,6 +33,8 @@ const port = process.env.PORT || 3001;
 // ============================================
 // MIDDLEWARES GLOBAIS
 // ============================================
+// Morgan: loga requisições HTTP (método, URL, status, tempo)
+app.use(morgan('dev'));
 // CORS: permite requisições de outros domínios (frontend)
 app.use(cors());
 // JSON parser: converte JSON do body da requisição em objeto

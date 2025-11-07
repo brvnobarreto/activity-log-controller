@@ -24,8 +24,16 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import type { ActionCodeSettings } from 'firebase-admin/auth';
 import { db, auth, FieldValue } from '../config/firebase.js';
 import { generateToken, decodeTokenFull } from '../utils/jwt.js';
+import { sendEmail } from '../utils/emailService.js';
+
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
+const EMAIL_VERIFICATION_CONTINUE_URL = process.env.EMAIL_VERIFICATION_CONTINUE_URL || `${APP_BASE_URL}/login`;
+const PASSWORD_RESET_CONTINUE_URL = process.env.PASSWORD_RESET_CONTINUE_URL || `${APP_BASE_URL}/reset-password`;
+const FIREBASE_DYNAMIC_LINK_DOMAIN = process.env.FIREBASE_DYNAMIC_LINK_DOMAIN;
+const FIREBASE_HANDLE_CODE_IN_APP = process.env.FIREBASE_HANDLE_CODE_IN_APP === 'true';
 
 // ============================================
 // FUNÇÕES HELPER SIMPLES
@@ -35,11 +43,6 @@ import { generateToken, decodeTokenFull } from '../utils/jwt.js';
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
-}
-
-// Gerar UID único baseado no email
-function generateUID(email: string): string {
-  return crypto.createHash('sha256').update(email.toLowerCase()).digest('hex').substring(0, 32);
 }
 
 // Gerar ID de sessão
@@ -64,6 +67,65 @@ function getRequestInfo(req: Request) {
     ipAddress,
     userAgent: req.headers['user-agent'] || undefined,
   };
+}
+
+function buildActionCodeSettings(url?: string): ActionCodeSettings | undefined {
+  if (!url) return undefined;
+
+  const settings: ActionCodeSettings = { url };
+
+  if (FIREBASE_HANDLE_CODE_IN_APP) {
+    settings.handleCodeInApp = true;
+  }
+
+  if (FIREBASE_DYNAMIC_LINK_DOMAIN) {
+    settings.dynamicLinkDomain = FIREBASE_DYNAMIC_LINK_DOMAIN;
+  }
+
+  return settings;
+}
+
+async function sendVerificationEmailMessage(email: string, name: string | undefined): Promise<void> {
+  const verificationLink = await auth.generateEmailVerificationLink(
+    email.toLowerCase(),
+    buildActionCodeSettings(EMAIL_VERIFICATION_CONTINUE_URL)
+  );
+  const greeting = name ? `Olá, ${name}!` : 'Olá!';
+
+  await sendEmail({
+    to: email,
+    subject: 'Confirme seu email',
+    html: `
+      <p>${greeting}</p>
+      <p>Obrigado por se registrar. Clique no botão abaixo para confirmar seu email:</p>
+      <p><a href="${verificationLink}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Confirmar email</a></p>
+      <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
+      <p>${verificationLink}</p>
+    `,
+    text: `${greeting}\n\nConfirme seu email acessando o link: ${verificationLink}`,
+  });
+}
+
+async function sendPasswordResetEmailMessage(email: string, name: string | undefined): Promise<void> {
+  const resetLink = await auth.generatePasswordResetLink(
+    email.toLowerCase(),
+    buildActionCodeSettings(PASSWORD_RESET_CONTINUE_URL)
+  );
+  const greeting = name ? `Olá, ${name}!` : 'Olá!';
+
+  await sendEmail({
+    to: email,
+    subject: 'Recuperação de senha',
+    html: `
+      <p>${greeting}</p>
+      <p>Recebemos um pedido para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:</p>
+      <p><a href="${resetLink}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Redefinir senha</a></p>
+      <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
+      <p>${resetLink}</p>
+      <p>Se você não solicitou esta ação, ignore este email.</p>
+    `,
+    text: `${greeting}\n\nRedefina sua senha acessando o link: ${resetLink}\nSe você não solicitou, ignore este email.`,
+  });
 }
 
 // Extrair token do header
@@ -110,16 +172,40 @@ export async function register(req: Request, res: Response) {
       return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
     }
 
-    // Verificar se email já existe
-    const userRef = db.collection('users').doc(email.toLowerCase());
-    const userDoc = await userRef.get();
+    const emailLower = email.toLowerCase();
 
-    if (userDoc.exists) {
+    // Verificar se usuário já existe no Firebase Auth
+    try {
+      await auth.getUserByEmail(emailLower);
       return res.status(409).json({ error: 'Email já cadastrado' });
+    } catch (firebaseError: any) {
+      if (firebaseError.code !== 'auth/user-not-found') {
+        console.error('Erro ao verificar email no Firebase Auth:', firebaseError);
+        return res.status(500).json({ error: 'Erro interno ao verificar email' });
+      }
     }
 
-    // Gerar UID único
-    const uid = generateUID(email.toLowerCase());
+    // Criar usuário no Firebase Auth
+    let userRecord;
+    try {
+      userRecord = await auth.createUser({
+        email: emailLower,
+        password,
+        displayName: name.trim(),
+        emailVerified: false,
+      });
+    } catch (firebaseError: any) {
+      if (firebaseError.code === 'auth/email-already-exists') {
+        return res.status(409).json({ error: 'Email já cadastrado' });
+      }
+
+      console.error('Erro ao criar usuário no Firebase Auth:', firebaseError);
+      return res.status(500).json({ error: 'Erro interno ao criar usuário' });
+    }
+
+    const uid = userRecord.uid;
+
+    const userRef = db.collection('users').doc(emailLower);
 
     // Hash da senha
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -127,28 +213,37 @@ export async function register(req: Request, res: Response) {
     // Criar usuário no Firestore
     const userData = {
       uid,
-      email: email.toLowerCase(),
+      email: emailLower,
       password: hashedPassword,
       name: name.trim(),
       provider: 'email',
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+      emailVerified: false,
     };
 
     await userRef.set(userData);
 
+    // Enviar email de verificação usando Firebase Auth
+    try {
+      await sendVerificationEmailMessage(emailLower, name);
+    } catch (emailError) {
+      console.error('Erro ao enviar email de verificação:', emailError);
+    }
+
     // Gerar token JWT
-    const token = generateToken({ uid, email: email.toLowerCase() });
+    const token = generateToken({ uid, email: emailLower });
 
     // Retornar resposta
     return res.status(201).json({
-      message: 'Usuário criado com sucesso',
+      message: 'Usuário criado com sucesso. Verifique seu email para ativar a conta.',
       token,
       user: {
         uid,
         email: userData.email,
         name: userData.name,
         provider: 'email',
+        emailVerified: false,
       },
     });
   } catch (error) {
@@ -202,6 +297,25 @@ export async function login(req: Request, res: Response) {
       return res.status(401).json({ error: 'Email ou senha inválidos' });
     }
 
+    let firebaseUser;
+    try {
+      firebaseUser = await auth.getUser(user.uid);
+    } catch (firebaseError) {
+      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
+      return res.status(500).json({ error: 'Erro interno ao validar usuário' });
+    }
+
+    if (!firebaseUser.emailVerified) {
+      return res.status(403).json({ error: 'Email ainda não verificado. Verifique sua caixa de entrada ou solicite um novo email de confirmação.' });
+    }
+
+    if (!user.emailVerified) {
+      await userRef.update({
+        emailVerified: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
     // Gerar token JWT
     const token = generateToken({
       uid: user.uid,
@@ -236,6 +350,7 @@ export async function login(req: Request, res: Response) {
         email: user.email,
         name: user.name,
         provider: user.provider,
+        emailVerified: true,
       },
     });
   } catch (error) {
@@ -280,6 +395,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
         provider: 'google',
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        emailVerified: true,
       };
 
       await db.collection('users').doc(decodedToken.email?.toLowerCase() || decodedToken.uid).set(userData);
@@ -290,8 +406,10 @@ export async function loginWithGoogle(req: Request, res: Response) {
         name: decodedToken.name || userData.name,
         picture: decodedToken.picture || userData.picture,
         updatedAt: FieldValue.serverTimestamp(),
+        emailVerified: true,
       });
       userData = { ...userData, ...decodedToken };
+      userData.emailVerified = true;
     }
 
     // Gerar token JWT
@@ -310,6 +428,7 @@ export async function loginWithGoogle(req: Request, res: Response) {
         name: userData.name,
         picture: userData.picture,
         provider: 'google',
+        emailVerified: true,
       },
     });
   } catch (error) {
@@ -335,7 +454,7 @@ export async function logout(req: Request, res: Response) {
 
     // Decodificar token para obter dados do usuário
     const tokenData = decodeTokenFull(token);
-    const { uid, email } = tokenData;
+    const { uid } = tokenData;
 
     // Invalidar todas as sessões ativas do usuário
     const sessionsRef = db.collection('sessions');
@@ -344,14 +463,16 @@ export async function logout(req: Request, res: Response) {
       .where('isActive', '==', true)
       .get();
 
-    const batch = db.batch();
-    activeSessions.forEach((doc) => {
-      batch.update(doc.ref, {
-        isActive: false,
-        invalidatedAt: FieldValue.serverTimestamp(),
+    if (!activeSessions.empty) {
+      const batch = db.batch();
+      activeSessions.forEach((doc) => {
+        batch.update(doc.ref, {
+          isActive: false,
+          invalidatedAt: FieldValue.serverTimestamp(),
+        });
       });
-    });
-    await batch.commit();
+      await batch.commit();
+    }
 
     return res.status(200).json({
       message: 'Logout realizado com sucesso',
@@ -361,6 +482,108 @@ export async function logout(req: Request, res: Response) {
     console.error('Erro ao fazer logout:', error);
     return res.status(500).json({
       error: 'Erro interno ao fazer logout',
+      message: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+}
+
+/**
+ * Reenviar email de verificação
+ * POST /api/auth/resend-verification
+ */
+export async function resendVerificationEmail(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const emailLower = email.toLowerCase();
+
+    let userRecord;
+    try {
+      userRecord = await auth.getUserByEmail(emailLower);
+    } catch (firebaseError: any) {
+      if (firebaseError.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
+      return res.status(500).json({ error: 'Erro interno ao buscar usuário' });
+    }
+
+    if (userRecord.emailVerified) {
+      return res.status(400).json({ error: 'Email já foi verificado' });
+    }
+
+    const userRef = db.collection('users').doc(emailLower);
+    const userDoc = await userRef.get();
+    const userData = userDoc.exists ? userDoc.data() : undefined;
+
+    try {
+      await sendVerificationEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
+    } catch (emailError) {
+      console.error('Erro ao reenviar email de verificação:', emailError);
+      return res.status(500).json({ error: 'Erro interno ao reenviar email de verificação' });
+    }
+
+    return res.status(200).json({ message: 'Email de verificação reenviado com sucesso' });
+  } catch (error) {
+    console.error('Erro ao reenviar email de verificação:', error);
+    return res.status(500).json({
+      error: 'Erro interno ao reenviar email de verificação',
+      message: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+}
+
+/**
+ * Solicitar recuperação de senha
+ * POST /api/auth/request-password-reset
+ */
+export async function requestPasswordReset(req: Request, res: Response) {
+  try {
+    const { email } = req.body;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const emailLower = email.toLowerCase();
+    let userRecord;
+
+    try {
+      userRecord = await auth.getUserByEmail(emailLower);
+    } catch (firebaseError: any) {
+      if (firebaseError.code === 'auth/user-not-found') {
+        return res.status(200).json({ message: 'Se este email estiver cadastrado, enviaremos instruções em instantes.' });
+      }
+
+      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
+      return res.status(500).json({ error: 'Erro interno ao buscar usuário' });
+    }
+
+    if (!userRecord.emailVerified) {
+      return res.status(403).json({ error: 'Confirme seu email antes de solicitar a recuperação de senha.' });
+    }
+
+    const userRef = db.collection('users').doc(emailLower);
+    const userDoc = await userRef.get();
+    const userData = userDoc.exists ? userDoc.data() : undefined;
+
+    try {
+      await sendPasswordResetEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
+    } catch (emailError) {
+      console.error('Erro ao enviar email de recuperação de senha:', emailError);
+      return res.status(500).json({ error: 'Erro interno ao enviar email de recuperação' });
+    }
+
+    return res.status(200).json({ message: 'Se este email estiver cadastrado, enviaremos instruções em instantes.' });
+  } catch (error) {
+    console.error('Erro ao solicitar recuperação de senha:', error);
+    return res.status(500).json({
+      error: 'Erro interno ao solicitar recuperação de senha',
       message: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

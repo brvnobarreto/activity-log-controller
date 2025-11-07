@@ -16,7 +16,14 @@
  */
 
 import express from 'express';
-import { register, login, loginWithGoogle, logout } from '../controllers/authController.js';
+import {
+  register,
+  login,
+  loginWithGoogle,
+  logout,
+  resendVerificationEmail,
+  requestPasswordReset,
+} from '../controllers/authController.js';
 
 const router = express.Router();
 
@@ -24,6 +31,8 @@ const router = express.Router();
 router.post('/register', register);      // Registrar novo usuário
 router.post('/login', login);             // Login de usuário
 router.post('/google', loginWithGoogle);  // Login com Google
+router.post('/resend-verification', resendVerificationEmail); // Reenviar email de verificação
+router.post('/request-password-reset', requestPasswordReset); // Solicitar recuperação de senha
 router.post('/logout', logout);           // Logout de usuário
 
 export default router;
