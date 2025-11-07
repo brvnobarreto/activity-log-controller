@@ -24,16 +24,32 @@
 
 ## 2. Login (`POST /api/auth/login`)
 
-**Body (JSON):**
-```json
-{
-  "email": "novo@teste.com",
-  "password": "senha1234"
-}
-```
+O backend espera um **idToken** emitido pelo Firebase. A sequência é:
 
-- Retorna `403` se o email ainda não estiver verificado.
-- Salve o `token` e o `sessionId` retornados para chamadas autenticadas.
+1. Use o Firebase Client SDK (ou a API REST do Firebase) para fazer login com email/senha:
+
+   ```http
+   POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=SUA_API_KEY
+   Content-Type: application/json
+
+   {
+     "email": "novo@teste.com",
+     "password": "senha1234",
+     "returnSecureToken": true
+   }
+   ```
+
+   A resposta contém `idToken`.
+
+2. Envie o `idToken` para o backend:
+
+   ```json
+   {
+     "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."
+   }
+   ```
+
+3. O backend devolve o token da API (`token`) e o `sessionId`. Guarde os dois para chamadas autenticadas.
 
 ## 3. Google (`POST /api/auth/google`)
 

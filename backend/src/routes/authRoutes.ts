@@ -6,10 +6,12 @@
  * Este arquivo define todas as rotas relacionadas à autenticação.
  * 
  * Rotas disponíveis (prefixo: /api/auth):
- * - POST /api/auth/register  → Registrar novo usuário (email/senha)
- * - POST /api/auth/login      → Login de usuário (email/senha)
- * - POST /api/auth/google      → Login com Google (Firebase ID token)
- * - POST /api/auth/logout      → Logout de usuário (invalida token)
+ * - POST /api/auth/register               → Cria usuário no Firebase e envia email de verificação
+ * - POST /api/auth/login                  → Recebe idToken do Firebase e devolve token da API
+ * - POST /api/auth/google                 → Login com Google (passar idToken do Firebase)
+ * - POST /api/auth/resend-verification    → Reenvia email de confirmação
+ * - POST /api/auth/request-password-reset → Dispara email de recuperação de senha
+ * - POST /api/auth/logout                 → Encerra sessões criadas pelo backend
  * 
  * Cada rota está conectada a uma função no authController.ts
  * que contém toda a lógica de negócio.

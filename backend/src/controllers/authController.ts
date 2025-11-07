@@ -1,28 +1,24 @@
 /**
  * ============================================
- * CONTROLLER DE AUTENTICAÇÃO
+ * AUTH CONTROLLER (EXPRESS + FIREBASE)
  * ============================================
- * 
- * Este arquivo contém toda a lógica de negócio relacionada à autenticação:
- * - Registro de novos usuários (email/senha)
- * - Login de usuários (email/senha)
- * - Login com Google (via Firebase ID token)
- * - Logout (invalidação de tokens e sessões)
- * 
- * Estrutura:
- * 1. Funções helper no topo (validações, hash, etc.)
- * 2. Controllers principais (register, login, loginWithGoogle, logout)
- * 
- * Cada função faz seu trabalho diretamente:
- * - Valida dados de entrada
- * - Interage diretamente com Firebase (Firestore)
- * - Gera tokens JWT
- * - Gerencia sessões
- * - Retorna respostas JSON
+ *
+ * O objetivo deste arquivo é deixar o fluxo de autenticação fácil de entender
+ * para quem está começando. Tudo está separado em etapas bem comentadas:
+ *
+ * 1. Helpers simples (validação de email, geração de IDs, coleta de dados da requisição).
+ * 2. Registro: cria o usuário no Firebase Auth e salva um perfil básico no Firestore.
+ * 3. Login: recebe um idToken gerado pelo Firebase no frontend, valida e devolve um token da API.
+ * 4. Login com Google: aproveita o idToken retornado pelo Firebase Client SDK.
+ * 5. Logout: encerra as sessões armazenadas na collection `sessions`.
+ * 6. Fluxos de email: reenviar verificação e pedir redefinição de senha usando os links do Firebase.
+ *
+ * Sobre senha e verificação:
+ * - O Firebase cuida do armazenamento seguro da senha e do estado “email verificado”.
+ * - O backend apenas orquestra a criação dos usuários, valida idTokens e envia emails amigáveis.
  */
 
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import type { ActionCodeSettings } from 'firebase-admin/auth';
 import { db, auth, FieldValue } from '../config/firebase.js';
@@ -149,50 +145,35 @@ export async function register(req: Request, res: Response) {
   try {
     const { email, password, name } = req.body;
 
-    // Validar campos obrigatórios
+    // Passo 1: validar os dados enviados pelo frontend
     if (!email || !password || !name) {
       return res.status(400).json({
         error: 'Todos os campos são obrigatórios',
-        fields: { email: !email, password: !password, name: !name }
+        fields: { email: !email, password: !password, name: !name },
       });
     }
 
-    // Validar formato de email
     if (!isValidEmail(email)) {
       return res.status(400).json({ error: 'Formato de email inválido' });
     }
 
-    // Validar senha (mínimo 8 caracteres)
     if (password.length < 8) {
       return res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres' });
     }
 
-    // Validar nome (mínimo 2 caracteres)
     if (name.trim().length < 2) {
       return res.status(400).json({ error: 'Nome deve ter pelo menos 2 caracteres' });
     }
 
     const emailLower = email.toLowerCase();
 
-    // Verificar se usuário já existe no Firebase Auth
+    // Passo 2: cria o usuário no Firebase Authentication (ele cuida da senha para nós)
+    let firebaseUser;
     try {
-      await auth.getUserByEmail(emailLower);
-      return res.status(409).json({ error: 'Email já cadastrado' });
-    } catch (firebaseError: any) {
-      if (firebaseError.code !== 'auth/user-not-found') {
-        console.error('Erro ao verificar email no Firebase Auth:', firebaseError);
-        return res.status(500).json({ error: 'Erro interno ao verificar email' });
-      }
-    }
-
-    // Criar usuário no Firebase Auth
-    let userRecord;
-    try {
-      userRecord = await auth.createUser({
+      firebaseUser = await auth.createUser({
         email: emailLower,
         password,
         displayName: name.trim(),
-        emailVerified: false,
       });
     } catch (firebaseError: any) {
       if (firebaseError.code === 'auth/email-already-exists') {
@@ -203,47 +184,34 @@ export async function register(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro interno ao criar usuário' });
     }
 
-    const uid = userRecord.uid;
-
     const userRef = db.collection('users').doc(emailLower);
 
-    // Hash da senha
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Criar usuário no Firestore
-    const userData = {
-      uid,
+    // Passo 3: salva um resumo do perfil no Firestore (útil para suas telas)
+    await userRef.set({
+      uid: firebaseUser.uid,
       email: emailLower,
-      password: hashedPassword,
       name: name.trim(),
       provider: 'email',
+      emailVerified: firebaseUser.emailVerified,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-      emailVerified: false,
-    };
+    });
 
-    await userRef.set(userData);
-
-    // Enviar email de verificação usando Firebase Auth
+    // Passo 4: dispara o email de verificação (ou apenas loga o link no console, caso SMTP não esteja configurado)
     try {
       await sendVerificationEmailMessage(emailLower, name);
     } catch (emailError) {
       console.error('Erro ao enviar email de verificação:', emailError);
     }
 
-    // Gerar token JWT
-    const token = generateToken({ uid, email: emailLower });
-
-    // Retornar resposta
     return res.status(201).json({
-      message: 'Usuário criado com sucesso. Verifique seu email para ativar a conta.',
-      token,
+      message: 'Usuário criado com sucesso. Verifique seu email antes de fazer login.',
       user: {
-        uid,
-        email: userData.email,
-        name: userData.name,
+        uid: firebaseUser.uid,
+        email: emailLower,
+        name: name.trim(),
         provider: 'email',
-        emailVerified: false,
+        emailVerified: firebaseUser.emailVerified,
       },
     });
   } catch (error) {
@@ -261,75 +229,70 @@ export async function register(req: Request, res: Response) {
  */
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { idToken } = req.body;
 
-    // Validar campos obrigatórios
-    if (!email || !password) {
-      return res.status(400).json({
-        error: 'Email e senha são obrigatórios',
-        fields: { email: !email, password: !password }
-      });
+    // Passo 1: receber o idToken gerado pelo Firebase no frontend
+    if (!idToken || typeof idToken !== 'string') {
+      return res.status(400).json({ error: 'idToken obrigatório' });
     }
 
-    // Validar formato de email
-    if (!isValidEmail(email)) {
-      return res.status(400).json({ error: 'Formato de email inválido' });
-    }
-
-    // Buscar usuário no Firestore
-    const userRef = db.collection('users').doc(email.toLowerCase());
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      // Mesma mensagem para não revelar se email existe
-      return res.status(401).json({ error: 'Email ou senha inválidos' });
-    }
-
-    const user = userDoc.data();
-
-    if (!user || !user.password || user.provider !== 'email') {
-      return res.status(401).json({ error: 'Email ou senha inválidos' });
-    }
-
-    // Verificar senha
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Email ou senha inválidos' });
-    }
-
-    let firebaseUser;
+    let decodedToken;
     try {
-      firebaseUser = await auth.getUser(user.uid);
-    } catch (firebaseError) {
-      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
-      return res.status(500).json({ error: 'Erro interno ao validar usuário' });
+      decodedToken = await auth.verifyIdToken(idToken);
+    } catch (verifyError) {
+      console.error('Erro ao validar idToken:', verifyError);
+      return res.status(401).json({ error: 'Token inválido ou expirado' });
     }
+
+    const email = decodedToken.email?.toLowerCase();
+
+    if (!email) {
+      return res.status(400).json({ error: 'Token sem email associado' });
+    }
+
+    // Passo 2: conferir se o email já está verificado no Firebase
+    const firebaseUser = await auth.getUser(decodedToken.uid);
 
     if (!firebaseUser.emailVerified) {
-      return res.status(403).json({ error: 'Email ainda não verificado. Verifique sua caixa de entrada ou solicite um novo email de confirmação.' });
+      return res.status(403).json({ error: 'Email ainda não verificado.' });
     }
 
-    if (!user.emailVerified) {
-      await userRef.update({
+    // Passo 3: carregar (ou criar) o perfil salvo no Firestore
+    const userRef = db.collection('users').doc(email);
+    const userDoc = await userRef.get();
+
+    const profileData = userDoc.exists
+      ? userDoc.data()
+      : {
+          uid: decodedToken.uid,
+          email,
+          name: firebaseUser.displayName || '',
+          provider: firebaseUser.providerData[0]?.providerId || 'email',
+        };
+
+    // Garantir que o documento existe/esteja atualizado
+    await userRef.set(
+      {
+        uid: decodedToken.uid,
+        email,
+        name: profileData?.name || firebaseUser.displayName || '',
+        picture: profileData?.picture || firebaseUser.photoURL || '',
+        provider: profileData?.provider || 'email',
         emailVerified: true,
         updatedAt: FieldValue.serverTimestamp(),
-      });
-    }
+        lastLoginAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 
-    // Gerar token JWT
-    const token = generateToken({
-      uid: user.uid,
-      email: user.email,
-    });
-
-    // Criar sessão
+    // Passo 4: registrar uma sessão simples para fins de auditoria
     const sessionId = generateSessionId();
     const { ipAddress, userAgent } = getRequestInfo(req);
 
     await db.collection('sessions').doc(sessionId).set({
       sessionId,
-      uid: user.uid,
-      email: user.email,
+      uid: decodedToken.uid,
+      email,
       createdAt: FieldValue.serverTimestamp(),
       lastActivity: FieldValue.serverTimestamp(),
       ipAddress,
@@ -337,19 +300,19 @@ export async function login(req: Request, res: Response) {
       isActive: true,
     });
 
-    // Atualizar último login
-    await userRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    // Passo 5: gerar o token da API (útil para proteger rotas do seu backend)
+    const appToken = generateToken({ uid: decodedToken.uid, email });
 
-    // Retornar resposta
     return res.status(200).json({
       message: 'Login realizado com sucesso',
-      token,
+      token: appToken,
       sessionId,
       user: {
-        uid: user.uid,
-        email: user.email,
-        name: user.name,
-        provider: user.provider,
+        uid: decodedToken.uid,
+        email,
+        name: profileData?.name || firebaseUser.displayName || '',
+        picture: profileData?.picture || firebaseUser.photoURL || undefined,
+        provider: profileData?.provider || 'email',
         emailVerified: true,
       },
     });
@@ -448,6 +411,7 @@ export async function logout(req: Request, res: Response) {
   try {
     const token = getToken(req);
 
+    // Passo 1: garantir que recebemos o token gerado pela API (Bearer token)
     if (!token) {
       return res.status(400).json({ error: 'Token não fornecido' });
     }
@@ -495,12 +459,14 @@ export async function resendVerificationEmail(req: Request, res: Response) {
   try {
     const { email } = req.body;
 
+    // Passo 1: validar email
     if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Email inválido' });
     }
 
     const emailLower = email.toLowerCase();
 
+    // Passo 2: buscar o usuário no Firebase Auth
     let userRecord;
     try {
       userRecord = await auth.getUserByEmail(emailLower);
@@ -517,10 +483,12 @@ export async function resendVerificationEmail(req: Request, res: Response) {
       return res.status(400).json({ error: 'Email já foi verificado' });
     }
 
+    // Passo 3: recuperar dados extras do Firestore (nome, foto etc.)
     const userRef = db.collection('users').doc(emailLower);
     const userDoc = await userRef.get();
     const userData = userDoc.exists ? userDoc.data() : undefined;
 
+    // Passo 4: pedir ao Firebase para gerar e enviar (ou logar) o link de verificação
     try {
       await sendVerificationEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
     } catch (emailError) {
@@ -546,6 +514,7 @@ export async function requestPasswordReset(req: Request, res: Response) {
   try {
     const { email } = req.body;
 
+    // Passo 1: validar email
     if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Email inválido' });
     }
@@ -568,10 +537,12 @@ export async function requestPasswordReset(req: Request, res: Response) {
       return res.status(403).json({ error: 'Confirme seu email antes de solicitar a recuperação de senha.' });
     }
 
+    // Passo 2: recuperar dados auxiliares para personalizar o email
     const userRef = db.collection('users').doc(emailLower);
     const userDoc = await userRef.get();
     const userData = userDoc.exists ? userDoc.data() : undefined;
 
+    // Passo 3: gerar e enviar (ou logar) o link de recuperação
     try {
       await sendPasswordResetEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
     } catch (emailError) {
