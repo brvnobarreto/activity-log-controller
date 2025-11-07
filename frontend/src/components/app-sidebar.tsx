@@ -52,12 +52,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const { sessionUser, refreshSessionUser } = useAuth()
   const [loadingUser, setLoadingUser] = useState(false)
-  const [userInfo, setUserInfo] = useState(() => sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string }>() || null)
+  const [userInfo, setUserInfo] = useState(() => sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string; role?: string }>() || null)
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
 
   useEffect(() => {
-    setUserInfo(sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string }>() || null)
+    setUserInfo(sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string; role?: string }>() || null)
   }, [sessionUser])
 
   useEffect(() => {
@@ -67,14 +67,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const fetchUser = async () => {
       setLoadingUser(true)
       try {
-        const { data } = await axios.get<{ user: { name?: string; email?: string; picture?: string; provider?: string } }>(`${apiBaseUrl}/api/auth/me`, {
+        const { data } = await axios.get<{ user: { name?: string; email?: string; picture?: string; provider?: string; role?: string } }>(`${apiBaseUrl}/api/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         })
 
-        setUserInfo(data.user)
-        saveSession({ user: data.user })
+        const normalizedUser = {
+          ...data.user,
+          role: data.user.role || 'Usuário',
+        }
+        setUserInfo(normalizedUser)
+        saveSession({ user: normalizedUser })
       } catch (error) {
         console.error("Não foi possível carregar o usuário atual:", error)
         refreshSessionUser()

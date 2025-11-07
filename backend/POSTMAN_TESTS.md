@@ -56,7 +56,16 @@ O backend espera um **idToken** emitido pelo Firebase. A sequência é:
 - Espera um `idToken` gerado no frontend com Firebase Auth.
 - Útil apenas após integrar o app web/mobile.
 
-## 4. Logout (`POST /api/auth/logout`)
+## 4. Perfil atual (`GET /api/auth/me`)
+
+**Headers:**
+```
+Authorization: Bearer {{token}}
+```
+
+- Retorna o usuário vinculado ao token salvo.
+
+## 5. Logout (`POST /api/auth/logout`)
 
 **Headers:**
 ```
@@ -94,4 +103,4 @@ if (pm.response.code === 200) {
 
 - Os e-mails de verificação e redefinição são enviados pelo próprio Firebase Authentication.
 - Personalize os templates no console do Firebase (Authentication → Templates) para alterar textos e links.
-- O backend ainda emite seu próprio JWT (`token`) para ser usado pelas rotas protegidas.
+- O backend ainda emite seu próprio JWT (`token`) para ser usado pelas rotas protegidas (ex.: `/api/auth/me`).

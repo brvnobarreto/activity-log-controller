@@ -14,7 +14,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -78,13 +77,13 @@ export function NavUser({ user }: NavUserProps) {
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="p-0 font-normal">
+            {/* <DropdownMenuLabel className="p-0 font-normal">
               <div className="grid gap-0.5 px-1 py-1.5 text-left text-sm">
                 <span className="truncate font-medium">{displayName}</span>
                 <span className="truncate text-xs text-muted-foreground">{displayEmail}</span>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator /> */}
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <User />

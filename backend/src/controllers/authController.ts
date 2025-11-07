@@ -66,6 +66,13 @@ function getToken(req: Request): string | null {
   return req.body.token || null;
 }
 
+type RequestWithUser = Request & {
+  user?: {
+    uid: string;
+    email: string;
+  };
+};
+
 // ============================================
 // CONTROLLERS
 // ============================================
@@ -369,6 +376,75 @@ export async function logout(req: Request, res: Response) {
     console.error('Erro ao fazer logout:', error);
     return res.status(500).json({
       error: 'Erro interno ao fazer logout',
+      message: error instanceof Error ? error.message : 'Erro desconhecido',
+    });
+  }
+}
+
+/**
+ * Buscar usuário autenticado
+ * GET /api/auth/me
+ */
+export async function getCurrentUser(req: RequestWithUser, res: Response) {
+  try {
+    const sessionUser = req.user;
+    if (!sessionUser) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+
+    const { uid, email } = sessionUser;
+    const emailLower = email.toLowerCase();
+
+    const userRef = db.collection('users').doc(emailLower);
+    const userDoc = await userRef.get();
+
+    let profile = userDoc.exists ? userDoc.data() || {} : {};
+
+    if (!userDoc.exists) {
+      try {
+        const firebaseUser = await auth.getUser(uid);
+        profile = {
+          uid,
+          email,
+          name: firebaseUser.displayName || '',
+          picture: firebaseUser.photoURL || '',
+          provider: firebaseUser.providerData[0]?.providerId || 'email',
+          emailVerified: firebaseUser.emailVerified ?? true,
+          role: 'Usuário',
+        };
+        await userRef.set({
+          ...profile,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      } catch (firebaseError) {
+        console.error('Erro ao obter usuário do Firebase Auth:', firebaseError);
+        profile = {
+          uid,
+          email,
+          name: '',
+          picture: '',
+          provider: 'email',
+          emailVerified: true,
+          role: 'Usuário',
+        };
+      }
+    } else {
+      profile = {
+        uid,
+        email,
+        name: profile.name || '',
+        picture: profile.picture || '',
+        provider: profile.provider || 'email',
+        emailVerified: profile.emailVerified ?? true,
+        role: profile.role || 'Usuário',
+      };
+    }
+
+    return res.status(200).json({ user: profile });
+  } catch (error) {
+    console.error('Erro ao carregar usuário atual:', error);
+    return res.status(500).json({
+      error: 'Erro interno ao carregar usuário',
       message: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

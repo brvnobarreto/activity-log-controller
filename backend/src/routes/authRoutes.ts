@@ -21,7 +21,9 @@ import {
   login,
   loginWithGoogle,
   logout,
+  getCurrentUser,
 } from '../controllers/authController.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -30,6 +32,7 @@ router.post('/register', register);      // Registrar novo usuário
 router.post('/login', login);             // Login de usuário
 router.post('/google', loginWithGoogle);  // Login com Google
 router.post('/logout', logout);           // Logout de usuário
+router.get('/me', authenticate, getCurrentUser); // Dados do usuário autenticado
 
 export default router;
 

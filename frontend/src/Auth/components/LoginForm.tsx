@@ -4,6 +4,7 @@ import {
   sendPasswordResetEmail,
   signInWithPopup,
 } from "firebase/auth"
+import axios from "axios"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -55,17 +56,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
       }
 
       // Passo 2: informar o backend (gera sessão/token da API)
-      const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(data.error || "Não foi possível completar o login.")
-      }
+      const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
 
       saveSession({
         token: data.token,
@@ -121,17 +112,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
       const credential = await signInWithPopup(auth, googleProvider)
       const idToken = await credential.user.getIdToken()
 
-      const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      })
-
-      const data = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        throw new Error(data.error || "Não foi possível completar o login.")
-      }
+      const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
 
       saveSession({
         token: data.token,

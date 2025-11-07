@@ -24,6 +24,7 @@ JWT_EXPIRES_IN=7d
 - `POST /api/auth/login`
 - `POST /api/auth/google`
 - `POST /api/auth/logout`
+- `GET /api/auth/me`
 
 ## Desenvolvimento
 

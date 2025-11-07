@@ -18,6 +18,7 @@ interface SessionUser {
   picture?: string
   provider?: string
   emailVerified?: boolean
+  role?: string
 }
 
 interface AuthContextValue {
@@ -79,10 +80,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [firebaseUser])
 
   const signOutUser = async () => {
-    await signOut(auth)
-    clearSession()
-    setFirebaseUser(null)
-    setSessionUser(null)
+    const token = getSessionToken()
+    try {
+      if (token) {
+        await axios.post(
+          `${apiBaseUrl}/api/auth/logout`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+      }
+    } catch (error) {
+      console.error('Erro ao encerrar sessão na API:', error)
+    } finally {
+      await signOut(auth)
+      clearSession()
+      setFirebaseUser(null)
+      setSessionUser(null)
+    }
   }
 
   const value = useMemo<AuthContextValue>(
