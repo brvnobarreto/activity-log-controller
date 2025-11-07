@@ -20,16 +20,8 @@
 
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import type { ActionCodeSettings } from 'firebase-admin/auth';
 import { db, auth, FieldValue } from '../config/firebase.js';
 import { generateToken, decodeTokenFull } from '../utils/jwt.js';
-import { sendEmail } from '../utils/emailService.js';
-
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:5173';
-const EMAIL_VERIFICATION_CONTINUE_URL = process.env.EMAIL_VERIFICATION_CONTINUE_URL || `${APP_BASE_URL}/login`;
-const PASSWORD_RESET_CONTINUE_URL = process.env.PASSWORD_RESET_CONTINUE_URL || `${APP_BASE_URL}/reset-password`;
-const FIREBASE_DYNAMIC_LINK_DOMAIN = process.env.FIREBASE_DYNAMIC_LINK_DOMAIN;
-const FIREBASE_HANDLE_CODE_IN_APP = process.env.FIREBASE_HANDLE_CODE_IN_APP === 'true';
 
 // ============================================
 // FUNÇÕES HELPER SIMPLES
@@ -63,65 +55,6 @@ function getRequestInfo(req: Request) {
     ipAddress,
     userAgent: req.headers['user-agent'] || undefined,
   };
-}
-
-function buildActionCodeSettings(url?: string): ActionCodeSettings | undefined {
-  if (!url) return undefined;
-
-  const settings: ActionCodeSettings = { url };
-
-  if (FIREBASE_HANDLE_CODE_IN_APP) {
-    settings.handleCodeInApp = true;
-  }
-
-  if (FIREBASE_DYNAMIC_LINK_DOMAIN) {
-    settings.dynamicLinkDomain = FIREBASE_DYNAMIC_LINK_DOMAIN;
-  }
-
-  return settings;
-}
-
-async function sendVerificationEmailMessage(email: string, name: string | undefined): Promise<void> {
-  const verificationLink = await auth.generateEmailVerificationLink(
-    email.toLowerCase(),
-    buildActionCodeSettings(EMAIL_VERIFICATION_CONTINUE_URL)
-  );
-  const greeting = name ? `Olá, ${name}!` : 'Olá!';
-
-  await sendEmail({
-    to: email,
-    subject: 'Confirme seu email',
-    html: `
-      <p>${greeting}</p>
-      <p>Obrigado por se registrar. Clique no botão abaixo para confirmar seu email:</p>
-      <p><a href="${verificationLink}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Confirmar email</a></p>
-      <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
-      <p>${verificationLink}</p>
-    `,
-    text: `${greeting}\n\nConfirme seu email acessando o link: ${verificationLink}`,
-  });
-}
-
-async function sendPasswordResetEmailMessage(email: string, name: string | undefined): Promise<void> {
-  const resetLink = await auth.generatePasswordResetLink(
-    email.toLowerCase(),
-    buildActionCodeSettings(PASSWORD_RESET_CONTINUE_URL)
-  );
-  const greeting = name ? `Olá, ${name}!` : 'Olá!';
-
-  await sendEmail({
-    to: email,
-    subject: 'Recuperação de senha',
-    html: `
-      <p>${greeting}</p>
-      <p>Recebemos um pedido para redefinir sua senha. Clique no botão abaixo para criar uma nova senha:</p>
-      <p><a href="${resetLink}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Redefinir senha</a></p>
-      <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
-      <p>${resetLink}</p>
-      <p>Se você não solicitou esta ação, ignore este email.</p>
-    `,
-    text: `${greeting}\n\nRedefina sua senha acessando o link: ${resetLink}\nSe você não solicitou, ignore este email.`,
-  });
 }
 
 // Extrair token do header
@@ -184,10 +117,7 @@ export async function register(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro interno ao criar usuário' });
     }
 
-    const userRef = db.collection('users').doc(emailLower);
-
-    // Passo 3: salva um resumo do perfil no Firestore (útil para suas telas)
-    await userRef.set({
+    await db.collection('users').doc(emailLower).set({
       uid: firebaseUser.uid,
       email: emailLower,
       name: name.trim(),
@@ -196,13 +126,6 @@ export async function register(req: Request, res: Response) {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-
-    // Passo 4: dispara o email de verificação (ou apenas loga o link no console, caso SMTP não esteja configurado)
-    try {
-      await sendVerificationEmailMessage(emailLower, name);
-    } catch (emailError) {
-      console.error('Erro ao enviar email de verificação:', emailError);
-    }
 
     return res.status(201).json({
       message: 'Usuário criado com sucesso. Verifique seu email antes de fazer login.',
@@ -446,115 +369,6 @@ export async function logout(req: Request, res: Response) {
     console.error('Erro ao fazer logout:', error);
     return res.status(500).json({
       error: 'Erro interno ao fazer logout',
-      message: error instanceof Error ? error.message : 'Erro desconhecido',
-    });
-  }
-}
-
-/**
- * Reenviar email de verificação
- * POST /api/auth/resend-verification
- */
-export async function resendVerificationEmail(req: Request, res: Response) {
-  try {
-    const { email } = req.body;
-
-    // Passo 1: validar email
-    if (!email || !isValidEmail(email)) {
-      return res.status(400).json({ error: 'Email inválido' });
-    }
-
-    const emailLower = email.toLowerCase();
-
-    // Passo 2: buscar o usuário no Firebase Auth
-    let userRecord;
-    try {
-      userRecord = await auth.getUserByEmail(emailLower);
-    } catch (firebaseError: any) {
-      if (firebaseError.code === 'auth/user-not-found') {
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
-
-      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
-      return res.status(500).json({ error: 'Erro interno ao buscar usuário' });
-    }
-
-    if (userRecord.emailVerified) {
-      return res.status(400).json({ error: 'Email já foi verificado' });
-    }
-
-    // Passo 3: recuperar dados extras do Firestore (nome, foto etc.)
-    const userRef = db.collection('users').doc(emailLower);
-    const userDoc = await userRef.get();
-    const userData = userDoc.exists ? userDoc.data() : undefined;
-
-    // Passo 4: pedir ao Firebase para gerar e enviar (ou logar) o link de verificação
-    try {
-      await sendVerificationEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
-    } catch (emailError) {
-      console.error('Erro ao reenviar email de verificação:', emailError);
-      return res.status(500).json({ error: 'Erro interno ao reenviar email de verificação' });
-    }
-
-    return res.status(200).json({ message: 'Email de verificação reenviado com sucesso' });
-  } catch (error) {
-    console.error('Erro ao reenviar email de verificação:', error);
-    return res.status(500).json({
-      error: 'Erro interno ao reenviar email de verificação',
-      message: error instanceof Error ? error.message : 'Erro desconhecido',
-    });
-  }
-}
-
-/**
- * Solicitar recuperação de senha
- * POST /api/auth/request-password-reset
- */
-export async function requestPasswordReset(req: Request, res: Response) {
-  try {
-    const { email } = req.body;
-
-    // Passo 1: validar email
-    if (!email || !isValidEmail(email)) {
-      return res.status(400).json({ error: 'Email inválido' });
-    }
-
-    const emailLower = email.toLowerCase();
-    let userRecord;
-
-    try {
-      userRecord = await auth.getUserByEmail(emailLower);
-    } catch (firebaseError: any) {
-      if (firebaseError.code === 'auth/user-not-found') {
-        return res.status(200).json({ message: 'Se este email estiver cadastrado, enviaremos instruções em instantes.' });
-      }
-
-      console.error('Erro ao buscar usuário no Firebase Auth:', firebaseError);
-      return res.status(500).json({ error: 'Erro interno ao buscar usuário' });
-    }
-
-    if (!userRecord.emailVerified) {
-      return res.status(403).json({ error: 'Confirme seu email antes de solicitar a recuperação de senha.' });
-    }
-
-    // Passo 2: recuperar dados auxiliares para personalizar o email
-    const userRef = db.collection('users').doc(emailLower);
-    const userDoc = await userRef.get();
-    const userData = userDoc.exists ? userDoc.data() : undefined;
-
-    // Passo 3: gerar e enviar (ou logar) o link de recuperação
-    try {
-      await sendPasswordResetEmailMessage(emailLower, userData?.name || userRecord.displayName || undefined);
-    } catch (emailError) {
-      console.error('Erro ao enviar email de recuperação de senha:', emailError);
-      return res.status(500).json({ error: 'Erro interno ao enviar email de recuperação' });
-    }
-
-    return res.status(200).json({ message: 'Se este email estiver cadastrado, enviaremos instruções em instantes.' });
-  } catch (error) {
-    console.error('Erro ao solicitar recuperação de senha:', error);
-    return res.status(500).json({
-      error: 'Erro interno ao solicitar recuperação de senha',
       message: error instanceof Error ? error.message : 'Erro desconhecido',
     });
   }

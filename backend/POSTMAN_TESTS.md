@@ -56,30 +56,7 @@ O backend espera um **idToken** emitido pelo Firebase. A sequência é:
 - Espera um `idToken` gerado no frontend com Firebase Auth.
 - Útil apenas após integrar o app web/mobile.
 
-## 4. Reenviar verificação (`POST /api/auth/resend-verification`)
-
-**Body (JSON):**
-```json
-{
-  "email": "novo@teste.com"
-}
-```
-
-- Envia novamente o link de verificação usando o Firebase.
-
-## 5. Recuperação de senha (`POST /api/auth/request-password-reset`)
-
-**Body (JSON):**
-```json
-{
-  "email": "novo@teste.com"
-}
-```
-
-- O Firebase gera o link de redefinição; será enviado por email (ou exibido no console caso SMTP não esteja configurado).
-- A redefinição em si é concluída através do link fornecido pelo Firebase.
-
-## 6. Logout (`POST /api/auth/logout`)
+## 4. Logout (`POST /api/auth/logout`)
 
 **Headers:**
 ```
@@ -115,6 +92,6 @@ if (pm.response.code === 200) {
 
 ## Observações
 
-- Os links de verificação/redefinição expiram seguindo as regras do Firebase (normalmente ~1h).
-- Configure SMTP no `.env` para enviar emails reais. Sem SMTP, os links são mostrados no console.
+- Os e-mails de verificação e redefinição são enviados pelo próprio Firebase Authentication.
+- Personalize os templates no console do Firebase (Authentication → Templates) para alterar textos e links.
 - O backend ainda emite seu próprio JWT (`token`) para ser usado pelas rotas protegidas.
