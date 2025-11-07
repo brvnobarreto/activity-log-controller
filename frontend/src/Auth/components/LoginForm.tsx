@@ -1,3 +1,9 @@
+/**
+ * Formulário de login: combina Firebase (idToken) com o backend Express.
+ * 1. Autentica com Firebase (email/senha ou Google).
+ * 2. Envia o idToken para a API e recebe token JWT + sessionId.
+ * 3. Salva os dados da sessão para consumo global.
+ */
 import * as React from "react"
 import {
   signInWithEmailAndPassword,
@@ -58,6 +64,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
       // Passo 2: informar o backend (gera sessão/token da API)
       const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
 
+      // Guardamos token + sessionId + snapshot do usuário para uso posterior
       saveSession({
         token: data.token,
         sessionId: data.sessionId,
@@ -93,6 +100,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
 
     setLoading(true)
     try {
+      // Recuperação padrão do Firebase (envia email automaticamente)
       await sendPasswordResetEmail(auth, email.trim())
       setFeedback("Enviamos um email com instruções para redefinir sua senha.")
     } catch (resetError: any) {
@@ -114,6 +122,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
 
       const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
 
+      // Mesmo fluxo do login com email: persistimos a sessão retornada pela API
       saveSession({
         token: data.token,
         sessionId: data.sessionId,

@@ -1,3 +1,11 @@
+/**
+ * Contexto de autenticação do frontend.
+ *
+ * - Observa o usuário do Firebase via onAuthStateChanged.
+ * - Sincroniza os dados da sessão com o backend (`/api/auth/me`).
+ * - Expõe helpers para atualizar o perfil e realizar logout completo
+ *   (Firebase + backend) em qualquer ponto da aplicação.
+ */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import type { User } from "firebase/auth"
 import { onAuthStateChanged, signOut } from "firebase/auth"
@@ -39,6 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
 
   useEffect(() => {
+    // Assim que o Firebase avisa sobre mudança de usuário, iniciamos a busca
+    // pelo perfil no backend. Se não houver session token, limpamos os dados locais.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user)
       if (!user) {
@@ -52,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshSessionUser = useCallback(async () => {
+    // Busca o perfil detalhado do usuário no backend (nome, papel, etc.)
     const token = getSessionToken()
     if (!token) {
       setSessionUser(null)
@@ -76,10 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!firebaseUser) return
+    // Sempre que o Firebase autenticar um usuário, sincronizamos com a API
     refreshSessionUser()
   }, [firebaseUser, refreshSessionUser])
 
   const signOutUser = useCallback(async () => {
+    // Logout completo: encerra sessão na API e também desloga no Firebase
     const token = getSessionToken()
     try {
       if (token) {
