@@ -18,6 +18,7 @@ import {
   getStoredUser,
   saveSession,
 } from "../utils/sessionStorage"
+import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 
 interface SessionUser {
   uid: string
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(getStoredUser<SessionUser>())
   const [loading, setLoading] = useState(true)
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
+  const apiBaseUrl = resolveApiBaseUrl()
 
   useEffect(() => {
     // Assim que o Firebase avisa sobre mudança de usuário, iniciamos a busca
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { data } = await axios.get<{ user: SessionUser }>(`${apiBaseUrl}/api/auth/me`, {
+      const { data } = await axios.get<{ user: SessionUser }>(buildApiUrl("/api/auth/me", apiBaseUrl), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -97,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       if (token) {
         await axios.post(
-          `${apiBaseUrl}/api/auth/logout`,
+          buildApiUrl("/api/auth/logout", apiBaseUrl),
           {},
           {
             headers: {

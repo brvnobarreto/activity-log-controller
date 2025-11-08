@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { auth, googleProvider } from "@/lib/firebase"
 import { saveSession } from "../utils/sessionStorage"
+import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
   onSuccess?: () => void
@@ -43,7 +44,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
+  const apiBaseUrl = resolveApiBaseUrl()
 
   const handleEmailLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -62,7 +63,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
       }
 
       // Passo 2: informar o backend (gera sessão/token da API)
-      const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
+      const { data } = await axios.post(buildApiUrl("/api/auth/login", apiBaseUrl), { idToken })
 
       // Guardamos token + sessionId + snapshot do usuário para uso posterior
       saveSession({
@@ -120,7 +121,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
       const credential = await signInWithPopup(auth, googleProvider)
       const idToken = await credential.user.getIdToken()
 
-      const { data } = await axios.post(`${apiBaseUrl}/api/auth/login`, { idToken })
+      const { data } = await axios.post(buildApiUrl("/api/auth/login", apiBaseUrl), { idToken })
 
       // Mesmo fluxo do login com email: persistimos a sessão retornada pela API
       saveSession({

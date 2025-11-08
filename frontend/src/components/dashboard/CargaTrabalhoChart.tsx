@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
-// Interface para os dados (do seu mockData.ts)
+// Interface de dados esperada para o gráfico
 interface ChartData {
   fiscal: string;
   registros: number;
@@ -21,38 +21,34 @@ interface CargaTrabalhoChartProps {
 }
 
 export function CargaTrabalhoChart({ data, className }: CargaTrabalhoChartProps) {
+  const hasData = Array.isArray(data) && data.length > 0;
+
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>Carga de Trabalho (Registros/Fiscal)</CardTitle>
       </CardHeader>
       <CardContent className="h-[300px]"> {/* Altura fixa para o card */}
-        <ResponsiveContainer width="100%" height="100%">
-          
-          {/* Usamos BarChart (Gráfico de Barras) em vez de LineChart.
-            O layout "vertical" coloca os nomes (fiscais) no eixo Y, 
-            o que facilita a leitura quando os nomes são longos.
-          */}
-          <BarChart 
-            data={data}
-            layout="vertical" // Deixa as barras na horizontal
-            margin={{ left: 30 }} // Dá espaço para os nomes dos fiscais
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            
-            {/* Eixo X (horizontal) mostra os números */}
-            <XAxis type="number" />
-            
-            {/* Eixo Y (vertical) mostra as categorias (nomes) */}
-            <YAxis dataKey="fiscal" type="category" fontSize="12px" />
-            
-            <Tooltip />
-            
-            {/* A Barra que desenha os dados */}
-            <Bar dataKey="registros" fill="#82ca9d" /> 
-          
-          </BarChart>
-        </ResponsiveContainer>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            {/* Gráfico de barras em layout vertical */}
+            <BarChart 
+              data={data}
+              layout="vertical"
+              margin={{ left: 30 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" />
+              <YAxis dataKey="fiscal" type="category" fontSize="12px" />
+              <Tooltip />
+              <Bar dataKey="registros" fill="#82ca9d" /> 
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-muted-foreground/30 text-sm text-muted-foreground">
+            Nenhuma carga de trabalho registrada.
+          </div>
+        )}
       </CardContent>
     </Card>
   );

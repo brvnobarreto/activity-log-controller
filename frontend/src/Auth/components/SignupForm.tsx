@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { auth, googleProvider } from "@/lib/firebase"
+import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 
 interface SignupFormProps extends React.ComponentProps<typeof Card> {
   onGoogleSignInSuccess?: () => void
@@ -20,7 +21,7 @@ export function SignupForm({ onGoogleSignInSuccess, ...props }: SignupFormProps)
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
+  const apiBaseUrl = resolveApiBaseUrl()
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -74,7 +75,7 @@ export function SignupForm({ onGoogleSignInSuccess, ...props }: SignupFormProps)
       const credential = await signInWithPopup(auth, googleProvider)
       const idToken = await credential.user.getIdToken()
 
-      await fetch(`${apiBaseUrl}/api/auth/login`, {
+      await fetch(buildApiUrl("/api/auth/login", apiBaseUrl), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),

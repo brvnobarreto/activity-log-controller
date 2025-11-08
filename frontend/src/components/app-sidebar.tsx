@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { LayoutDashboard, Users, BarChart3, MapPin } from "lucide-react"
+import { LayoutDashboard, Users, BarChart3, MapPin, ClipboardList } from "lucide-react"
 import axios from "axios"
 
 import { SearchForm } from "@/components/search-form"
@@ -21,6 +21,7 @@ import { NavUser } from "./ui/nav-user"
 import { UserInfo } from "./ui/user-info"
 import { getSessionToken, getStoredUser, saveSession } from "@/Auth/utils/sessionStorage"
 import { useAuth } from "@/Auth/context/AuthContext"
+import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 
 // Navigation data for the sidebar
 const data = {
@@ -54,7 +55,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [loadingUser, setLoadingUser] = useState(false)
   const [userInfo, setUserInfo] = useState(() => sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string; role?: string }>() || null)
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
+  const apiBaseUrl = resolveApiBaseUrl()
 
   useEffect(() => {
     setUserInfo(sessionUser || getStoredUser<{ name?: string; email?: string; picture?: string; provider?: string; role?: string }>() || null)
@@ -67,7 +68,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const fetchUser = async () => {
       setLoadingUser(true)
       try {
-        const { data } = await axios.get<{ user: { name?: string; email?: string; picture?: string; provider?: string; role?: string } }>(`${apiBaseUrl}/api/auth/me`, {
+        const { data } = await axios.get<{ user: { name?: string; email?: string; picture?: string; provider?: string; role?: string } }>(buildApiUrl("/api/auth/me", apiBaseUrl), {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -90,6 +91,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     fetchUser()
   }, [apiBaseUrl, refreshSessionUser])
 
+  const navItems = React.useMemo(() => {
+    const baseItems = [...data.navItems]
+    const role = userInfo?.role?.toLowerCase()
+
+    if (role === 'fiscal') {
+      baseItems.push({
+        title: 'Fiscal',
+        url: '/fiscal',
+        icon: ClipboardList,
+      })
+    }
+
+    return baseItems
+  }, [userInfo?.role])
+
   return (
     <Sidebar {...props}>
       <SidebarHeader>
@@ -100,7 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {data.navItems.map((item) => {
+              {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <SidebarMenuItem key={item.title}>

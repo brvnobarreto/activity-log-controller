@@ -38,13 +38,21 @@ export function AlertasList({ title, headers, items, keysToShow, className }: Al
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id}>
-                {keysToShow.map((key) => (
-                  <TableCell key={key}>{item[key]}</TableCell>
-                ))}
+            {items.length > 0 ? (
+              items.map((item) => (
+                <TableRow key={item.id}>
+                  {keysToShow.map((key) => (
+                    <TableCell key={key}>{item[key]}</TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={headers.length} className="text-center text-sm text-muted-foreground">
+                  Nenhum registro disponível.
+                </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </CardContent>

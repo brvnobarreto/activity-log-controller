@@ -23,6 +23,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import authRoutes from "./routes/authRoutes.js";
+import activityRoutes from "./routes/activityRoutes.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
 
 // Carregar variáveis de ambiente do arquivo .env
 dotenv.config();
@@ -38,7 +40,9 @@ app.use(morgan('dev'));
 // CORS: permite requisições de outros domínios (frontend)
 app.use(cors());
 // JSON parser: converte JSON do body da requisição em objeto
-app.use(express.json());
+// Aumentamos o limite para suportar imagens em Base64 (~1 MB) vindas do frontend
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // ============================================
 // ROTAS
@@ -50,6 +54,10 @@ app.get('/api/health', (req, res) => {
 
 // Rotas de autenticação (prefixo: /api/auth)
 app.use('/api/auth', authRoutes);
+// Rotas de atividades (prefixo: /api/activities)
+app.use('/api/activities', activityRoutes);
+// Rotas de funcionários (prefixo: /api/employees)
+app.use('/api/employees', employeeRoutes);
 
 // ============================================
 // INICIAR SERVIDOR
