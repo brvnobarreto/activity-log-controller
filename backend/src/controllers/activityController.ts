@@ -33,6 +33,8 @@ type ActivityInput = {
   latitude?: number;
   longitude?: number;
   fotoUrl?: string;
+  createdBy?: string;
+  updatedBy?: string;
 };
 
 // Listas com os valores permitidos para nível e status (usadas na validação)
@@ -63,6 +65,7 @@ function mapFirestoreData(doc: QueryDocumentSnapshot<DocumentData> | DocumentSna
       },
       fotoUrl: null,
       createdAt: null,
+    createdBy: null,
       updatedAt: null,
     };
   }
@@ -82,9 +85,8 @@ function mapFirestoreData(doc: QueryDocumentSnapshot<DocumentData> | DocumentSna
     },
     fotoUrl: data.fotoUrl ?? null,
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
-    createdBy: data.createdBy ?? null,
+    createdBy: typeof data.createdBy === "string" ? data.createdBy : null,
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : null,
-    updatedBy: data.updatedBy ?? null,
   };
 }
 
@@ -179,6 +181,9 @@ export async function createActivity(req: Request, res: Response) {
   const fallbackNome = typeof req.user?.email === "string" && req.user.email.trim().length > 0
     ? req.user.email
     : "Usuário";
+  const createdBy = typeof req.user?.email === "string" && req.user.email.trim().length > 0
+    ? req.user.email.trim()
+    : null;
 
   const descricaoParaSalvar = descricaoNormalizada || descricaoOriginalNormalizada;
 
@@ -195,10 +200,9 @@ export async function createActivity(req: Request, res: Response) {
       longitude: longitudeValida,
     },
     fotoUrl: fotoUrlNormalizada,
-    createdBy: nomeNormalizado || fallbackNome,
+    createdBy,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-    updatedBy: nomeNormalizado || fallbackNome,
   };
 
   try {
@@ -338,7 +342,6 @@ export async function updateActivity(req: Request, res: Response) {
       },
       fotoUrl: fotoUrlFinal,
       updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: nomeNormalizado,
     });
 
     const updatedDoc = await docRef.get();

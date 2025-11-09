@@ -1,3 +1,4 @@
+// TELA: Overview - consolida indicadores e gráficos da operação
 import { useMemo } from "react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { ProdutividadeChart } from "@/components/dashboard/ProdutividadeChart";
@@ -5,6 +6,7 @@ import { AlertasList } from "@/components/dashboard/AlertasList";
 import { CargaTrabalhoChart } from "@/components/dashboard/CargaTrabalhoChart";
 import { useActivityContext } from "@/context/ActivityContext";
 import type { Atividade, NivelAtividade } from "@/context/ActivityContext";
+import { useAuth } from "@/Auth/context/AuthContext";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const;
 const WEEKDAY_ORDER = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"] as const;
@@ -50,8 +52,12 @@ function buildLocalLabel(activity: Atividade) {
 }
 
 export default function Overview() {
+  const { sessionUser } = useAuth();
+  const userRole = sessionUser?.role ? sessionUser.role.trim().toLowerCase() : undefined;
+  const isFiscal = userRole === "fiscal";
   const { activities, isLoading } = useActivityContext();
 
+  // Monta a série com o total de registros por dia útil, usado pelo gráfico de produtividade
   const produtividadeSemanal = useMemo(() => {
     const initialCounts: Record<(typeof WEEKDAY_ORDER)[number], number> = {
       Seg: 0,
@@ -83,6 +89,7 @@ export default function Overview() {
     [produtividadeSemanal]
   );
 
+  // Agrupa o número de registros por fiscal para alimentar o gráfico de carga de trabalho
   const cargaFiscal = useMemo(() => {
     const counts = new Map<string, number>();
 
@@ -192,11 +199,30 @@ export default function Overview() {
     [pendentes, taxaAprovacao, tempoValidacao, totalRegistrosSemana]
   );
 
+  if (isFiscal) {
+    return (
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral</h1>
+        <div className="p-4 md:p-6">
+          <section className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-6 text-center space-y-3">
+            <h2 className="text-xl md:text-2xl font-semibold">Área do Fiscal</h2>
+            <p className="text-sm text-muted-foreground">
+              Estamos preparando indicadores específicos para o time de fiscalização.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Enquanto isso, utilize a aba Atividades para registrar e acompanhar suas ações.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral (Supervisão)</h1>
+      <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 p-4 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 p-4">
         <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Indicadores de Performance</h2>
         <KPICard
           title="Total de Registros (Semana)"

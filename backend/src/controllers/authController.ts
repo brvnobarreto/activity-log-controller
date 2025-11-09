@@ -25,6 +25,41 @@ import { generateToken, decodeTokenFull } from '../utils/jwt.js';
 
 const DEFAULT_ROLE = 'fiscal';
 
+function extractRoleFromStructure(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractRoleFromStructure(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const directKeys = ['role', 'primary', 'nome'];
+    for (const key of directKeys) {
+      const raw = obj[key];
+      if (typeof raw === 'string' && raw.trim().length) {
+        return raw.trim();
+      }
+    }
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val === 'boolean' && val && key.trim().length) {
+        return key.trim();
+      }
+    }
+    for (const val of Object.values(obj)) {
+      const extracted = extractRoleFromStructure(val);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
+}
+
 // ============================================
 // FUNÇÕES HELPER SIMPLES
 // ============================================
@@ -409,12 +444,12 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
     const userRef = db.collection('users').doc(emailLower);
     const userDoc = await userRef.get();
 
-    let profile = userDoc.exists ? userDoc.data() || {} : {};
+    let storedData = userDoc.exists ? userDoc.data() || {} : {};
 
     if (!userDoc.exists) {
       try {
         const firebaseUser = await auth.getUser(uid);
-        profile = {
+        storedData = {
           uid,
           email,
           name: firebaseUser.displayName || '',
@@ -424,12 +459,12 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
           role: DEFAULT_ROLE,
         };
         await userRef.set({
-          ...profile,
+          ...storedData,
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
       } catch (firebaseError) {
         console.error('Erro ao obter usuário do Firebase Auth:', firebaseError);
-        profile = {
+        storedData = {
           uid,
           email,
           name: '',
@@ -439,19 +474,29 @@ export async function getCurrentUser(req: RequestWithUser, res: Response) {
           role: DEFAULT_ROLE,
         };
       }
-    } else {
-      profile = {
-        uid,
-        email,
-        name: profile.name || '',
-        picture: profile.picture || '',
-        provider: profile.provider || 'email',
-        emailVerified: profile.emailVerified ?? true,
-        role: profile.role || DEFAULT_ROLE,
-      };
     }
 
-    return res.status(200).json({ user: profile });
+    const resolvedRole =
+      extractRoleFromStructure(storedData.role) ||
+      extractRoleFromStructure((storedData as any)?.perfil?.role) ||
+      extractRoleFromStructure((storedData as any)?.profile?.role) ||
+      extractRoleFromStructure((storedData as any)?.roles) ||
+      DEFAULT_ROLE;
+
+    const responseUser = {
+      uid,
+      email,
+      name: typeof storedData.name === 'string' ? storedData.name : '',
+      picture: typeof storedData.picture === 'string' ? storedData.picture : '',
+      provider: typeof storedData.provider === 'string' ? storedData.provider : 'email',
+      emailVerified: typeof storedData.emailVerified === 'boolean' ? storedData.emailVerified : true,
+      role: resolvedRole,
+      roles: (storedData as any)?.roles ?? null,
+      perfil: (storedData as any)?.perfil ?? null,
+      profile: (storedData as any)?.profile ?? null,
+    };
+
+    return res.status(200).json({ user: responseUser });
   } catch (error) {
     console.error('Erro ao carregar usuário atual:', error);
     return res.status(500).json({

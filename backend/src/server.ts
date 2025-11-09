@@ -40,17 +40,13 @@ app.use(morgan('dev'));
 // CORS: permite requisições de outros domínios (frontend)
 app.use(cors());
 // JSON parser: converte JSON do body da requisição em objeto
-// Aumentamos o limite para suportar imagens em Base64 (~1 MB) vindas do frontend
+// Aumenta o limite para suportar imagens em Base64 (~1 MB) vindas do frontend
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // ============================================
 // ROTAS
 // ============================================
-// Rota de health check (verificar se API está funcionando)
-app.get('/api/health', (req, res) => {
-  res.json({ message: "API está funcionando corretamente" });
-});
 
 // Rotas de autenticação (prefixo: /api/auth)
 app.use('/api/auth', authRoutes);

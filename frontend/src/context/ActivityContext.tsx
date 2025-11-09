@@ -29,7 +29,6 @@ export type Atividade = {
   createdAt?: string | null
   createdBy?: string | null
   updatedAt?: string | null
-  updatedBy?: string | null
   fotoUrl?: string | null
 }
 
@@ -46,8 +45,6 @@ export type ActivityPayload = {
   latitude?: number
   longitude?: number
   fotoUrl?: string | null
-  createdBy?: string | null
-  updatedBy?: string | null
 }
 
 type ApiActivity = {
@@ -67,7 +64,6 @@ type ApiActivity = {
   createdAt?: string | null
   createdBy?: string | null
   updatedAt?: string | null
-  updatedBy?: string | null
 }
 
 interface ActivityContextValue {
@@ -112,7 +108,6 @@ function mapApiActivityToAtividade(activity: ApiActivity): Atividade {
     createdAt: activity.createdAt ?? null,
     createdBy: activity.createdBy ?? null,
     updatedAt: activity.updatedAt ?? null,
-    updatedBy: activity.updatedBy ?? null,
     fotoUrl: activity.fotoUrl ?? null,
   }
 }
@@ -200,9 +195,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         setActivities(data)
       } catch (error) {
         console.error("Erro ao buscar atividades:", error)
-        if (force) {
-          invalidateCache(cacheKey)
-        }
+        invalidateCache(cacheKey)
       } finally {
         setIsLoading(false)
       }
@@ -211,7 +204,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    void fetchActivities()
+    void fetchActivities(true)
   }, [fetchActivities, sessionUser?.uid])
 
   const refresh = useCallback(
@@ -319,24 +312,21 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       return [] as Atividade[]
     }
 
-    const identifiers = new Set<string>()
+    const normalizedEmail = normalize(sessionUser.email)
+    const normalizedUid = normalize(sessionUser.uid)
+    const normalizedName = normalize(sessionUser.name)
 
-    if (sessionUser.email) identifiers.add(normalize(sessionUser.email))
-    if (sessionUser.name) identifiers.add(normalize(sessionUser.name))
-    if (sessionUser.uid) identifiers.add(normalize(sessionUser.uid))
-
-    if (identifiers.size === 0) {
-      return [] as Atividade[]
-    }
+    const identifiers = [normalizedEmail, normalizedUid, normalizedName].filter((value): value is string => Boolean(value))
 
     return activities.filter((activity) => {
-      const candidates = [
-        normalize(activity.createdBy),
-        normalize(activity.updatedBy),
-        normalize(activity.nome),
-      ]
+      const nome = normalize(activity.nome)
+      const createdBy = normalize(activity.createdBy)
 
-      return candidates.some((candidate) => candidate && identifiers.has(candidate))
+      if (createdBy && identifiers.includes(createdBy)) {
+        return true
+      }
+
+      return identifiers.includes(nome)
     })
   }, [activities, sessionUser])
 

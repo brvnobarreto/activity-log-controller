@@ -15,20 +15,21 @@
 
 import { Router } from "express";
 import { createActivity, deleteActivity, listActivities, updateActivity } from "../controllers/activityController.js";
+import { authenticate } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
 // GET /api/activities → devolve todas as atividades cadastradas
-router.get("/", listActivities);
+router.get("/", authenticate, listActivities);
 
 // POST /api/activities → cria um novo registro de atividade
-router.post("/", createActivity);
+router.post("/", authenticate, createActivity);
 
 // PUT /api/activities/:id → atualiza um registro existente
-router.put("/:id", updateActivity);
+router.put("/:id", authenticate, updateActivity);
 
 // DELETE /api/activities/:id → remove um registro existente
-router.delete("/:id", deleteActivity);
+router.delete("/:id", authenticate, deleteActivity);
 
 export default router;
 

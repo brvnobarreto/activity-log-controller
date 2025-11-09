@@ -28,6 +28,9 @@ interface SessionUser {
   provider?: string
   emailVerified?: boolean
   role?: string
+  roles?: unknown
+  perfil?: { role?: string | null } | null
+  profile?: { role?: string | null } | null
 }
 
 interface AuthContextValue {

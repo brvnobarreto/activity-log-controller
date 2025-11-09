@@ -1,9 +1,7 @@
-/**
- * Tela de funcionários com cache de requisições para evitar re-fetch
- * sempre que o usuário troca de rota e volta para esta página.
- */
+// TELA: Funcionários - gestão de cadastro com cache para evitar re-fetch em navegação
 
-import { useCallback, useEffect, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { usePageTitle } from "@/hooks/use-page-title";
 import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api";
@@ -29,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSessionToken } from "@/Auth/utils/sessionStorage";
 import { MoreVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/Auth/context/AuthContext";
 
 type FuncionarioItem = {
   id: string;
@@ -61,6 +60,34 @@ export default function Funcionario() {
   usePageTitle("Funcionários");
 
   const apiBaseUrl = resolveApiBaseUrl();
+  const { sessionUser } = useAuth();
+  const resolvedRole = useMemo(() => {
+    if (!sessionUser) return "";
+    const sources: unknown[] = [
+      sessionUser.role,
+      sessionUser.perfil?.role,
+      sessionUser.profile?.role,
+      (sessionUser as { roles?: unknown }).roles,
+    ];
+    for (const source of sources) {
+      const extracted = extractRoleFromStructure(source);
+      if (extracted) {
+        return extracted.trim();
+      }
+    }
+    return "";
+  }, [sessionUser]);
+
+  const canManageAll = useMemo(() => {
+    const normalizedRole = resolvedRole.trim().toLowerCase();
+    if (!normalizedRole) return false;
+    if (normalizedRole === "superior") return true;
+    if (normalizedRole === "admin" || normalizedRole === "administrador") return true;
+    if (normalizedRole.includes("superior")) return true;
+    if (normalizedRole.includes("admin")) return true;
+    if (normalizedRole.includes("gestor") || normalizedRole.includes("gestão")) return true;
+    return false;
+  }, [resolvedRole]);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [funcionarios, setFuncionarios] = useState<FuncionarioItem[]>([]);
@@ -88,6 +115,10 @@ export default function Funcionario() {
     setFormError(null);
   };
 
+  /**
+   * Busca a lista de funcionários utilizando cache temporal para evitar requisições duplicadas.
+   * Quando force=true, ignora o cache e atualiza os dados diretamente da API.
+   */
   const loadFuncionarios = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
       const token = getSessionToken();
@@ -143,6 +174,7 @@ export default function Funcionario() {
     [apiBaseUrl],
   );
 
+  // Carrega os funcionários assim que a tela entra em foco
   useEffect(() => {
     void loadFuncionarios();
   }, [loadFuncionarios]);
@@ -177,6 +209,10 @@ export default function Funcionario() {
     resetFormFields();
   }
 
+  /**
+   * Envia os dados do formulário para criar ou atualizar o funcionário,
+   * mantendo a lista e o cache local sincronizados com a resposta da API.
+   */
   async function handleSave() {
     if (!canSave || isSaving) return;
 
@@ -242,6 +278,9 @@ export default function Funcionario() {
     }
   }
 
+  /**
+   * Remove o funcionário selecionado e limpa o cache em memória para evitar dados desatualizados.
+   */
   async function handleRemove(id: string) {
     if (deletingId === id) return;
 
@@ -313,7 +352,7 @@ export default function Funcionario() {
               funcionarios.map((f) => (
                 <Card key={f.id} className="relative overflow-hidden">
                   <div className="absolute right-2 top-2">
-                    <DropdownMenu>
+          <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label="Mais opções">
                           <MoreVertical className="h-4 w-4" />
@@ -329,17 +368,19 @@ export default function Funcionario() {
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          disabled={deletingId === f.id}
-                          onSelect={(event) => {
-                            event.preventDefault();
-                            handleRemove(f.id);
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          {deletingId === f.id ? "Removendo..." : "Remover"}
-                        </DropdownMenuItem>
+              {canManageAll ? (
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  disabled={deletingId === f.id}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    handleRemove(f.id);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {deletingId === f.id ? "Removendo..." : "Remover"}
+                </DropdownMenuItem>
+              ) : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -431,17 +472,19 @@ export default function Funcionario() {
                                 <Pencil className="mr-2 h-4 w-4" />
                                 Editar
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                disabled={deletingId === f.id}
-                                onSelect={(event) => {
-                                  event.preventDefault();
-                                  handleRemove(f.id);
-                                }}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                {deletingId === f.id ? "Removendo..." : "Remover"}
-                              </DropdownMenuItem>
+                          {canManageAll ? (
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              disabled={deletingId === f.id}
+                              onSelect={(event) => {
+                                event.preventDefault();
+                                handleRemove(f.id);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              {deletingId === f.id ? "Removendo..." : "Remover"}
+                            </DropdownMenuItem>
+                          ) : null}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -521,6 +564,9 @@ export default function Funcionario() {
   );
 }
 
+/**
+ * Converte o formato complexo retornado pela API em um item pronto para uso na interface.
+ */
 function mapApiFuncionarioToItem(funcionario: ApiFuncionario): FuncionarioItem {
   function extractFromRoles(value: unknown): string {
     if (!value) return "";
@@ -563,6 +609,41 @@ function mapApiFuncionarioToItem(funcionario: ApiFuncionario): FuncionarioItem {
     funcao: funcaoDerivada || "--",
     fotoUrl: funcionario.fotoUrl?.trim() || null,
   };
+}
+
+function extractRoleFromStructure(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractRoleFromStructure(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const directKeys = ["role", "primary", "nome"];
+    for (const key of directKeys) {
+      const raw = obj[key];
+      if (typeof raw === "string" && raw.trim().length) {
+        return raw.trim();
+      }
+    }
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val === "boolean" && val && key.trim().length) {
+        return key.trim();
+      }
+    }
+    for (const val of Object.values(obj)) {
+      const extracted = extractRoleFromStructure(val);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
 }
 
 function getInitials(nome: string) {

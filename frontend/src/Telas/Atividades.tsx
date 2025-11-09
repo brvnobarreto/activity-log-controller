@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+// TELA: Atividades - gerenciamento completo das ocorrências e formulários da operação
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, MapPin, Plus, Trash2, MessageCircle, CheckCircle, Clock, XCircle } from "lucide-react";
+import { Camera, MapPin, Plus, Trash2, MessageCircle, CheckCircle, Clock, XCircle, Pencil, MoreVertical } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/Auth/context/AuthContext";
 import {
@@ -17,10 +18,17 @@ import {
   isStatusAtividade,
   useActivityContext,
 } from "@/context/ActivityContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type AtividadesProps = {
   title?: string;
   filterByCurrentUser?: boolean;
+  autoOpenNew?: boolean;
 };
 
 function formatDayLabel(dateValue: string | null | undefined) {
@@ -275,9 +283,16 @@ function getBlocoMSubLocalLabel(pavimentoNome: string, areaNome: string) {
 
 // Fonte de dados e filtros são fornecidos por ActivityContext.
 
-export default function Atividades({ title = "Atividades", filterByCurrentUser = false }: AtividadesProps = {}) {
+export default function Atividades({ title, filterByCurrentUser, autoOpenNew = false }: AtividadesProps = {}) {
   const isMobile = useIsMobile();
   const { sessionUser } = useAuth();
+  const normalizedRole = sessionUser?.role ? sessionUser.role.trim().toLowerCase() : undefined;
+  const isFiscal = normalizedRole === "fiscal";
+  const effectiveFilterByCurrentUser = filterByCurrentUser ?? isFiscal;
+  const effectiveTitle = title ?? (isFiscal ? "Minhas Atividades" : "Atividades");
+  const location = useLocation();
+  const navigate = useNavigate();
+  // O contexto centraliza as operações de CRUD e o cache das atividades
   const {
     activities: globalActivities,
     personalActivities,
@@ -287,11 +302,12 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     deleteActivity,
   } = useActivityContext();
 
-  const scope: ActivityScope = filterByCurrentUser ? "personal" : "global";
+  const scope: ActivityScope = effectiveFilterByCurrentUser ? "personal" : "global";
 
+  // Define a lista base (global ou pessoal) dependendo das props da tela
   const activities = useMemo(
-    () => (filterByCurrentUser ? personalActivities : globalActivities),
-    [filterByCurrentUser, personalActivities, globalActivities]
+    () => (effectiveFilterByCurrentUser ? personalActivities : globalActivities),
+    [effectiveFilterByCurrentUser, personalActivities, globalActivities]
   );
 
   const groupedActivities = useMemo(() => groupActivitiesByDay(activities), [activities]);
@@ -321,6 +337,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const [hasRemovedPhoto, setHasRemovedPhoto] = useState(false);
   const [photoTouched, setPhotoTouched] = useState(false);
+  const [showCoordinateInputs, setShowCoordinateInputs] = useState(true);
   
   // Estados para local e sublocais
   const [localSelecionado, setLocalSelecionado] = useState<string>("");
@@ -352,6 +369,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     photoData !== null &&
     hasCoordinates;
 
+  // Função utilitária para limpar completamente o formulário da atividade
   const resetForm = useCallback(() => {
     setDescricao("");
     setNivel("");
@@ -372,11 +390,13 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     setLocationError(null);
     setLocationTouched(false);
     setPhotoTouched(false);
+    setShowCoordinateInputs(true);
     setLocalSelecionado("");
     setSubLocaisSelecionados({});
     setPavimentoSelecionado("");
   }, []);
 
+  // Preenche o formulário com os dados existentes quando estamos editando
   const fillFormWithActivity = useCallback((activity: Atividade) => {
     setDescricao(activity.descricaoOriginal ?? activity.registro ?? "");
     setNivel(activity.nivel);
@@ -398,6 +418,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     setLocationError(null);
     setLocationTouched(false);
     setPhotoTouched(false);
+    setShowCoordinateInputs(true);
 
     const localMatch = locaisDisponiveis.find((local) => {
       if (!activity.localPrincipal) return false;
@@ -455,11 +476,18 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     setSubLocaisSelecionados(selecionados);
   }, []);
 
-  function openAddDialog() {
+  const openAddDialog = useCallback(() => {
     setEditingActivityId(null);
     resetForm();
     setIsDialogOpen(true);
-  }
+  }, [resetForm]);
+
+  // Abre o diálogo automaticamente quando acessado via deep link (/atividades/nova)
+  useEffect(() => {
+    if (autoOpenNew) {
+      openAddDialog();
+    }
+  }, [autoOpenNew, openAddDialog]);
 
   function handleLocalChange(value: string) {
     setLocalSelecionado(value);
@@ -656,6 +684,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
             setLng(longitude);
             setLatInput(latitude.toString());
             setLngInput(longitude.toString());
+            setShowCoordinateInputs(false);
             resolve();
           },
           (err) => reject(err),
@@ -668,12 +697,16 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
       setLng("");
       setLatInput("");
       setLngInput("");
+      setShowCoordinateInputs(true);
     } finally {
       setIsLocating(false);
     }
   }
 
   function handleManualLatitudeChange(value: string) {
+    if (!showCoordinateInputs) {
+      setShowCoordinateInputs(true);
+    }
     setLatInput(value);
     setLocationTouched(true);
 
@@ -707,6 +740,9 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
   }
 
   function handleManualLongitudeChange(value: string) {
+    if (!showCoordinateInputs) {
+      setShowCoordinateInputs(true);
+    }
     setLngInput(value);
     setLocationTouched(true);
 
@@ -744,6 +780,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
     setLng("");
     setLatInput("");
     setLngInput("");
+    setShowCoordinateInputs(true);
     setLocationTouched(true);
     setLocationError("Informe latitude e longitude.");
   }
@@ -774,7 +811,6 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
 
     const userDisplayName =
       sessionUser?.name?.trim() || sessionUser?.email?.trim() || sessionUser?.uid?.trim();
-    const createdBy = sessionUser?.email?.trim() || sessionUser?.uid?.trim() || undefined;
     const activityBeingEdited = editingActivityId
       ? activities.find((item) => item.id === editingActivityId)
       : null;
@@ -801,8 +837,6 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
       latitude: typeof lat === "number" ? lat : undefined,
       longitude: typeof lng === "number" ? lng : undefined,
       fotoUrl: fotoUrlPayload,
-      createdBy: createdBy ?? undefined,
-      updatedBy: userDisplayName ?? undefined,
     };
 
     setIsSubmitting(true);
@@ -825,7 +859,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold mb-2">{title}</h1>
+        <h1 className="text-2xl font-bold mb-2">{effectiveTitle}</h1>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -865,11 +899,12 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
               <table className="w-full table-fixed border-separate border-spacing-y-4">
                 <thead>
                   <tr className="text-sm font-medium text-gray-600">
-                    {!filterByCurrentUser && <th className="pb-3 px-4 w-3/12 text-left">Nome</th>}
-                    <th className={`pb-3 px-4 ${filterByCurrentUser ? "w-3/12" : "w-2/12"} text-left`}>Local</th>
-                    <th className={`pb-3 px-4 ${filterByCurrentUser ? "w-6/12" : "w-4/12"} text-left`}>Descrição</th>
+                    {!effectiveFilterByCurrentUser && <th className="pb-3 px-4 w-2/12 text-left">Nome</th>}
+                    <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-3/12" : "w-2/12"} text-left`}>Local</th>
+                    <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-5/12" : "w-4/12"} text-left`}>Descrição</th>
                     <th className="pb-3 px-4 w-1/12 text-center">Nível</th>
-                    <th className="pb-3 px-4 w-2/12 text-center">Status</th>
+                    <th className="pb-3 px-4 w-1/12 text-center">Status</th>
+                    <th className="pb-3 px-4 w-2/12 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -891,7 +926,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                           }
                         }}
                       >
-                        {!filterByCurrentUser && (
+                        {!effectiveFilterByCurrentUser && (
                           <td className="bg-gray-50 px-4 py-4 text-left text-sm font-medium text-gray-800 rounded-l-lg transition-colors group-hover:bg-gray-100">
                             {atividade.nome}
                           </td>
@@ -899,13 +934,13 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
 
                         <td
                           className={`bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100 ${
-                            filterByCurrentUser ? "rounded-l-lg" : ""
+                            effectiveFilterByCurrentUser ? "rounded-l-lg" : ""
                           }`}
                         >
                           {atividade.localPrincipal ?? "--"}
                         </td>
 
-                        <td className={`bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100 ${filterByCurrentUser ? "" : ""}`}>
+                        <td className={`bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100 ${effectiveFilterByCurrentUser ? "" : ""}`}>
                           <span className="break-words">{descricaoVisivel}</span>
                         </td>
 
@@ -933,7 +968,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                           )}
                         </td>
 
-                        <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100 rounded-r-lg">
+                        <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100">
                           {isMobile ? (
                             getStatusIcon(atividade.status)
                           ) : (
@@ -949,6 +984,55 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                               {atividade.status}
                             </span>
                           )}
+                        </td>
+                        
+                        <td className="bg-gray-50 px-4 py-4 transition-colors group-hover:bg-gray-100 rounded-r-lg">
+                          <div className="flex justify-end">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Mais opções"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuItem
+                                  onSelect={(event) => {
+                                    event.preventDefault();
+                                    const msg = encodeURIComponent(`Feedback sobre a atividade ${atividade.id}`);
+                                    window.open(`https://wa.me/5585999999999?text=${msg}`, "_blank");
+                                  }}
+                                >
+                                  <MessageCircle className="mr-2 h-4 w-4" />
+                                  Feedback
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={(event) => {
+                                    event.preventDefault();
+                                    startEditActivity(atividade);
+                                  }}
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  disabled={isDeleting}
+                                  onSelect={(event) => {
+                                    event.preventDefault();
+                                    handleDeleteActivity(atividade);
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  {isDeleting ? "Removendo..." : "Remover"}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -975,6 +1059,10 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
           if (!open) {
             resetForm();
             setEditingActivityId(null);
+            // Se veio de /atividades/nova, ao fechar o diálogo navega para /atividades
+            if (location.pathname === "/atividades/nova") {
+              navigate("/atividades", { replace: true });
+            }
           }
         }}
       >
@@ -1255,12 +1343,12 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
 
               <div className="grid gap-2">
                 <Label htmlFor="localizacao-button">Localização (obrigatória)</Label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button 
+                <div className="flex flex-col gap-2">
+                  <Button
                     id="localizacao-button"
                     variant="outline"
-                    className="w-full sm:w-auto"
-                    onClick={handleUseCurrentLocation} 
+                    className="w-full"
+                    onClick={handleUseCurrentLocation}
                     disabled={isLocating}
                     aria-describedby="localizacao-descricao location-feedback"
                   >
@@ -1270,7 +1358,7 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                     <Button
                       type="button"
                       variant="ghost"
-                      className="w-full sm:w-auto"
+                      className="w-full"
                       onClick={handleClearLocation}
                       disabled={isLocating}
                     >
@@ -1280,32 +1368,34 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                 </div>
                 <span id="localizacao-descricao" className="sr-only">Use a localização atual do dispositivo ou informe manualmente as coordenadas.</span>
 
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="grid gap-1">
-                    <Label htmlFor="latitude">Latitude</Label>
-                    <Input
-                      id="latitude"
-                      value={latInput}
-                      onChange={(event) => handleManualLatitudeChange(event.target.value)}
-                      placeholder="-3.732700"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      aria-describedby="location-feedback"
-                    />
+                {showCoordinateInputs && (
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
+                    <div className="grid gap-1">
+                      <Label htmlFor="latitude">Latitude</Label>
+                      <Input
+                        id="latitude"
+                        value={latInput}
+                        onChange={(event) => handleManualLatitudeChange(event.target.value)}
+                        placeholder="-3.732700"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        aria-describedby="location-feedback"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="longitude">Longitude</Label>
+                      <Input
+                        id="longitude"
+                        value={lngInput}
+                        onChange={(event) => handleManualLongitudeChange(event.target.value)}
+                        placeholder="-38.526700"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        aria-describedby="location-feedback"
+                      />
+                    </div>
                   </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor="longitude">Longitude</Label>
-                    <Input
-                      id="longitude"
-                      value={lngInput}
-                      onChange={(event) => handleManualLongitudeChange(event.target.value)}
-                      placeholder="-38.526700"
-                      inputMode="decimal"
-                      autoComplete="off"
-                      aria-describedby="location-feedback"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {hasCoordinates && (
                   <p className="text-xs text-muted-foreground">
@@ -1327,9 +1417,12 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                     ? locationError
                     : locationTouched && !hasCoordinates
                       ? "Informe latitude e longitude válidas."
-                      : "Use o botão ou informe manualmente as coordenadas (latitude entre -90 e 90, longitude entre -180 e 180)."}
+                      : showCoordinateInputs
+                        ? "Use o botão ou informe manualmente as coordenadas (latitude entre -90 e 90, longitude entre -180 e 180)."
+                        : "Coordenadas preenchidas automaticamente. Clique em \"Limpar localização\" para editar manualmente."}
                 </p>
               </div>
+
             </div>
           </div>
 
@@ -1367,7 +1460,6 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
             const subLocaisLista = Array.isArray(selectedActivity.subLocais)
               ? selectedActivity.subLocais.filter((item) => Boolean(item?.trim()))
               : [];
-            const atualizadoPor = selectedActivity.updatedBy ?? selectedActivity.createdBy ?? undefined;
             const possuiCoordenadas =
               typeof selectedActivity.lat === "number" && typeof selectedActivity.lng === "number";
             const mapsUrl = possuiCoordenadas
@@ -1431,26 +1523,30 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                     )}
                   </div>
 
-                  <div className="flex justify-between items-start gap-4">
-                    <span className="font-medium text-gray-800 whitespace-nowrap">Localização</span>
-                    {possuiCoordenadas && mapsUrl ? (
-                      <div className="flex flex-col items-end gap-1">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-medium text-gray-800 whitespace-nowrap">Localização</span>
+                      {possuiCoordenadas ? (
                         <span className="text-sm text-gray-600">
                           {selectedActivity.lat?.toFixed(6)}, {selectedActivity.lng?.toFixed(6)}
                         </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Não informado</span>
+                      )}
+                    </div>
+                    {possuiCoordenadas && mapsUrl ? (
+                      <div className="flex justify-end">
                         <Button
                           type="button"
-                          variant="link"
-                          className="h-auto p-0 text-xs"
+                          variant="outline"
+                          className="h-8 px-3 text-xs"
                           onClick={() => window.open(mapsUrl, "_blank")}
                         >
                           <MapPin className="mr-1 h-3 w-3" />
                           Abrir no Maps
                         </Button>
                       </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Não informado</span>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="flex justify-between">
@@ -1466,12 +1562,6 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
                       <span className="font-medium text-gray-800">Atualizado em</span>
                       <span className="text-right">
                         {atualizacaoFormatada ?? "--"}
-                        {atualizadoPor && (
-                          <>
-                            <br />
-                            <span className="text-xs text-muted-foreground">por {atualizadoPor}</span>
-                          </>
-                        )}
                       </span>
                     </div>
                   )}
@@ -1496,19 +1586,6 @@ export default function Atividades({ title = "Atividades", filterByCurrentUser =
           Contato
         </Button>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <Button
-            variant="destructive"
-            onClick={() => selectedActivity && handleDeleteActivity(selectedActivity)}
-            disabled={isDeleting}
-          >
-            {isDeleting ? "Removendo..." : "Remover"}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => selectedActivity && startEditActivity(selectedActivity)}
-          >
-            Editar
-          </Button>
           <Button variant="outline" onClick={closeActivityDetail}>Fechar</Button>
         </div>
       </DialogFooter>

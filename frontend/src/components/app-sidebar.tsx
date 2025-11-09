@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { LayoutDashboard, Users, BarChart3, MapPin, ClipboardList } from "lucide-react"
+import { LayoutDashboard, Users, BarChart3, MapPin } from "lucide-react"
 import axios from "axios"
 
 import { SearchForm } from "@/components/search-form"
@@ -91,20 +91,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     fetchUser()
   }, [apiBaseUrl, refreshSessionUser])
 
-  const navItems = React.useMemo(() => {
-    const baseItems = [...data.navItems]
-    const role = userInfo?.role?.toLowerCase()
-
-    if (role === 'fiscal') {
-      baseItems.push({
-        title: 'Fiscal',
-        url: '/fiscal',
-        icon: ClipboardList,
-      })
-    }
-
-    return baseItems
-  }, [userInfo?.role])
+  const navItems = data.navItems
 
   return (
     <Sidebar {...props}>

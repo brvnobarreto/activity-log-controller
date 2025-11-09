@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { auth, googleProvider } from "@/lib/firebase"
 import { saveSession } from "../utils/sessionStorage"
 import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
+import { useAuth } from "@/Auth/context/AuthContext"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
   onSuccess?: () => void
@@ -45,6 +46,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
   const [error, setError] = React.useState<string | null>(null)
 
   const apiBaseUrl = resolveApiBaseUrl()
+  const { refreshSessionUser } = useAuth()
 
   const handleEmailLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -71,6 +73,9 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
         sessionId: data.sessionId,
         user: data.user,
       })
+
+      // Atualiza imediatamente o contexto de sessão (evita precisar recarregar a página)
+      await refreshSessionUser()
 
       setFeedback("Login realizado com sucesso!")
       onSuccess?.()
@@ -129,6 +134,9 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
         sessionId: data.sessionId,
         user: data.user,
       })
+
+      // Atualiza imediatamente o contexto de sessão
+      await refreshSessionUser()
 
       setFeedback("Login com Google realizado com sucesso!")
       onGoogleSuccess?.()
