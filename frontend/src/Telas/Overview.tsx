@@ -202,7 +202,7 @@ export default function Overview() {
   if (isFiscal) {
     return (
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral</h1>
+        <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Dashboard</h1>
         <div className="p-4 md:p-6">
           <section className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/20 p-6 text-center space-y-3">
             <h2 className="text-xl md:text-2xl font-semibold">Área do Fiscal</h2>
@@ -220,7 +220,7 @@ export default function Overview() {
 
   return (
     <div>
-      <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Visão Geral</h1>
+      <h1 className="text-2xl md:text-3xl font-bold p-4 md:p-6">Dashboard</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 p-4">
         <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Indicadores de Performance</h2>

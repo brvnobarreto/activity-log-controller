@@ -114,6 +114,34 @@ function formatDateTime(dateValue: string | null | undefined) {
   });
 }
 
+function formatDateOnly(dateValue: string | null | undefined) {
+  if (!dateValue) return "--";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function formatTimeOnly(dateValue: string | null | undefined) {
+  if (!dateValue) return "--";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const NIVEL_EXCEL_COLORS: Record<NivelAtividade, string> = {
+  Baixo: "FF22C55E",
+  Normal: "FF3B82F6",
+  Alto: "FFF97316",
+  Máximo: "FFEF4444",
+};
+
 // Agrupa atividades por dia de criação para facilitar a renderização da lista.
 // O Map mantém a ordem de inserção e permite ler a quantidade de registros por data.
 function groupActivitiesByDay(list: Atividade[]) {
@@ -463,24 +491,36 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       ["Gerado em", new Date().toLocaleString("pt-BR")],
       ["Total de registros", activities.length],
       [],
-      ["Data", "Descrição", "Nível", "Responsável", "Email", "Local", "Sub-locais", "Status", "Feedback"],
+      [
+        "Data",
+        "Hora",
+        "Descrição",
+        "Nível",
+        "Responsável",
+        "Email",
+        "Local",
+        "Sub-locais",
+        "Status",
+        "Feedback Conteúdo",
+        "Feedback Autor",
+        "Feedback Registro",
+      ],
     ];
 
     activities.forEach((atividade) => {
       const feedbackEntry = feedbackMap[atividade.id] ?? null;
-      const feedbackValue = feedbackEntry
-        ? [
-            feedbackEntry.authorName || feedbackEntry.authorEmail || "Supervisor",
-            feedbackEntry.createdAt ? `(${formatDateTime(feedbackEntry.createdAt)})` : null,
-            feedbackEntry.contentText || feedbackEntry.subject || "",
-          ]
-            .filter((value): value is string => Boolean(value && value.trim().length))
-            .join(" - ")
+      const feedbackContent = feedbackEntry
+        ? (feedbackEntry.contentText || feedbackEntry.subject || "").trim() || "--"
         : "--";
+      const feedbackAuthor = feedbackEntry
+        ? (feedbackEntry.authorName || feedbackEntry.authorEmail || "Supervisor")
+        : "--";
+      const feedbackTimestamp = feedbackEntry?.createdAt ? formatDateTime(feedbackEntry.createdAt) : "--";
 
       // Cada linha representa uma atividade registrada, com dados essenciais e resumo do feedback.
       worksheetData.push([
-        atividade.createdAt ? formatDateTime(atividade.createdAt) : "--",
+        atividade.createdAt ? formatDateOnly(atividade.createdAt) : "--",
+        atividade.createdAt ? formatTimeOnly(atividade.createdAt) : "--",
         atividade.descricaoOriginal ?? atividade.registro ?? "--",
         atividade.nivel ?? "--",
         atividade.nome ?? "--",
@@ -488,14 +528,44 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         atividade.localPrincipal ?? "--",
         Array.isArray(atividade.subLocais) ? atividade.subLocais.join(", ") : "--",
         atividade.status ?? "--",
-        feedbackValue,
+        feedbackContent,
+        feedbackAuthor,
+        feedbackTimestamp,
       ]);
     });
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
+    const headerRowIndex = 4;
+    const headerColumns = worksheetData[headerRowIndex]?.length ?? 0;
+    for (let col = 0; col < headerColumns; col += 1) {
+      const cellAddress = XLSX.utils.encode_cell({ r: headerRowIndex, c: col });
+      const cell = worksheet[cellAddress];
+      if (cell) {
+        const font = { ...(cell.s?.font ?? {}), bold: true };
+        cell.s = { ...(cell.s ?? {}), font };
+      }
+    }
+
+    const nivelColumnIndex = 3;
+    activities.forEach((atividade, index) => {
+      const nivel = atividade.nivel;
+      if (!nivel || !(nivel in NIVEL_EXCEL_COLORS)) {
+        return;
+      }
+      const rowIndex = headerRowIndex + 1 + index;
+      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: nivelColumnIndex });
+      const cell = worksheet[cellAddress];
+      if (!cell) {
+        return;
+      }
+      const fillColor = NIVEL_EXCEL_COLORS[nivel];
+      const fill = { patternType: "solid", fgColor: { rgb: fillColor }, bgColor: { rgb: fillColor } };
+      cell.s = { ...(cell.s ?? {}), fill };
+    });
+
     // Ajusta larguras para facilitar a leitura do XLSX exportado.
-    const colCount = 8;
+    const colCount = 12;
     const colWidths = Array.from({ length: colCount }, (_, colIndex) => {
       const maxLen = worksheetData.reduce((max, row) => {
         const value = row[colIndex];
@@ -508,7 +578,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Registro de Atividades");
-    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array", cellStyles: true });
     const blob = new Blob([buffer], { type: "application/octet-stream" });
     const nome = `registro-atividades-${new Date().toISOString().slice(0, 10)}.xlsx`;
     saveAs(blob, nome);
