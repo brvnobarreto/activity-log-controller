@@ -190,7 +190,8 @@ export async function getLatestFeedback(req: Request, res: Response) {
       return res.status(401).json({ error: "Não autenticado" });
     }
 
-    const userDoc = await db.collection("users").doc(req.user.email.toLowerCase()).get();
+    const requesterEmail = req.user.email.toLowerCase();
+    const userDoc = await db.collection("users").doc(requesterEmail).get();
     const userData = (userDoc.exists ? (userDoc.data() as UserData) : null) ?? {};
     const userRole = resolveUserRole(userData)?.toLowerCase();
 
@@ -200,15 +201,56 @@ export async function getLatestFeedback(req: Request, res: Response) {
 
     const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit ?? "1"), 10) || 1, 1), 10);
 
-    const snapshot = await db
-      .collection("feedbacks")
-      .orderBy("createdAt", "desc")
-      .limit(limit)
-      .get();
-
-    const feedbacks = snapshot.docs.map(mapFeedbackDoc);
-
-    return res.status(200).json({ feedbacks });
+    // Para fiscais, mostramos apenas feedbacks direcionados a ele (targetEmail).
+    // Para supervisores, mostramos apenas feedbacks enviados por ele (authorEmail).
+    // Implementamos ordenação com fallback caso seja necessário índice composto.
+    if (userRole === "fiscal") {
+      try {
+        const snapshot = await db
+          .collection("feedbacks")
+          .where("targetEmail", "==", requesterEmail)
+          .orderBy("createdAt", "desc")
+          .limit(limit)
+          .get();
+        const feedbacks = snapshot.docs.map(mapFeedbackDoc);
+        return res.status(200).json({ feedbacks });
+      } catch (err) {
+        if (!isMissingIndexError(err)) throw err;
+        const all = await db.collection("feedbacks").where("targetEmail", "==", requesterEmail).get();
+        const ordered = all.docs
+          .map(mapFeedbackDoc)
+          .sort((a, b) => {
+            const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+            const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+            return tb - ta;
+          })
+          .slice(0, limit);
+        return res.status(200).json({ feedbacks: ordered });
+      }
+    } else {
+      try {
+        const snapshot = await db
+          .collection("feedbacks")
+          .where("authorEmail", "==", requesterEmail)
+          .orderBy("createdAt", "desc")
+          .limit(limit)
+          .get();
+        const feedbacks = snapshot.docs.map(mapFeedbackDoc);
+        return res.status(200).json({ feedbacks });
+      } catch (err) {
+        if (!isMissingIndexError(err)) throw err;
+        const all = await db.collection("feedbacks").where("authorEmail", "==", requesterEmail).get();
+        const ordered = all.docs
+          .map(mapFeedbackDoc)
+          .sort((a, b) => {
+            const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+            const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+            return tb - ta;
+          })
+          .slice(0, limit);
+        return res.status(200).json({ feedbacks: ordered });
+      }
+    }
   } catch (error) {
     console.error("Erro ao buscar feedbacks:", error);
     return res.status(500).json({

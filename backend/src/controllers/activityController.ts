@@ -42,6 +42,56 @@ const VALID_LEVELS = ["Baixo", "Normal", "Alto", "Máximo"];
 const VALID_STATUS = ["Pendente", "Concluído", "Não Concluído"];
 
 /**
+ * Extrai um valor de role de estruturas variadas
+ * (string direta, arrays, objetos aninhados com propriedade role, ou flags booleanas).
+ * Mantemos a mesma heurística utilizada em outros controladores para consistência.
+ */
+function extractRoleFromStructure(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractRoleFromStructure(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const directKeys = ["role", "primary", "nome"];
+    for (const key of directKeys) {
+      const raw = obj[key];
+      if (typeof raw === "string" && raw.trim().length) {
+        return raw.trim();
+      }
+    }
+    for (const [key, val] of Object.entries(obj)) {
+      if (typeof val === "boolean" && val && key.trim().length) {
+        return key.trim();
+      }
+    }
+    for (const val of Object.values(obj)) {
+      const extracted = extractRoleFromStructure(val);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
+}
+
+function resolveUserRole(data: Record<string, unknown> | null | undefined): string | null {
+  if (!data) return null;
+  return (
+    extractRoleFromStructure((data as any).role) ??
+    extractRoleFromStructure((data as any)?.perfil?.role) ??
+    extractRoleFromStructure((data as any)?.profile?.role) ??
+    extractRoleFromStructure((data as any).roles)
+  );
+}
+
+/**
  * Converte o objeto salvo no Firestore para o formato de resposta da API.
  * Além de transformar o timestamp em string ISO, garante que sempre temos
  * as mesmas chaves no JSON retornado.
@@ -97,12 +147,38 @@ function mapFirestoreData(doc: QueryDocumentSnapshot<DocumentData> | DocumentSna
  * de criação (mais recentes primeiro). Ideal para preencher a tela inicial
  * de atividades no frontend.
  */
-export async function listActivities(_req: Request, res: Response) {
+export async function listActivities(req: Request, res: Response) {
   try {
-    const snapshot = await db
-      .collection(COLLECTION_NAME)
-      .orderBy("createdAt", "desc")
-      .get();
+    if (!req.user?.email) {
+      return res.status(401).json({ message: "Não autenticado" });
+    }
+
+    const requesterEmail = req.user.email.toLowerCase();
+    const userDoc = await db.collection("users").doc(requesterEmail).get();
+    const userData = userDoc.exists ? (userDoc.data() as Record<string, unknown>) : null;
+    const role = resolveUserRole(userData)?.toLowerCase() ?? "fiscal";
+
+    // Fiscais: somente atividades próprias (criadas por ele).
+    if (role === "fiscal") {
+      // Evita dependência de índice composto: filtra por createdBy e ordena em memória.
+      const filtered = await db
+        .collection(COLLECTION_NAME)
+        .where("createdBy", "==", requesterEmail)
+        .get();
+
+      const activities = filtered.docs
+        .map(mapFirestoreData)
+        .sort((a, b) => {
+          const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+          const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+          return tb - ta;
+        });
+
+      return res.json({ activities });
+    }
+
+    // Supervisores (ou outros): lista completa ordenada por data de criação desc.
+    const snapshot = await db.collection(COLLECTION_NAME).orderBy("createdAt", "desc").get();
 
     const activities = snapshot.docs.map(mapFirestoreData);
 
