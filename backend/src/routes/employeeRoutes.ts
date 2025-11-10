@@ -11,13 +11,14 @@ import {
   listEmployees,
   updateEmployee,
 } from "../controllers/employeeController.js";
+import { authenticate } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
-router.get("/", listEmployees);
-router.post("/", createEmployee);
-router.put("/:id", updateEmployee);
-router.delete("/:id", deleteEmployee);
+router.get("/", authenticate, listEmployees);
+router.post("/", authenticate, createEmployee);
+router.put("/:id", authenticate, updateEmployee);
+router.delete("/:id", authenticate, deleteEmployee);
 
 export default router;
 

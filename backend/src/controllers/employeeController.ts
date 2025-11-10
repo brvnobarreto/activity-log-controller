@@ -136,6 +136,48 @@ function extractString(value: unknown): string {
   return "";
 }
 
+// Resolve role from various shapes
+function extractRoleFromStructure(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractRoleFromStructure(item);
+      if (extracted) return extracted;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const direct = ["role", "primary", "nome"];
+    for (const k of direct) {
+      const raw = (obj as any)[k];
+      if (typeof raw === "string" && raw.trim().length) return (raw as string).trim();
+    }
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === "boolean" && v && k.trim().length) return k.trim();
+    }
+    for (const v of Object.values(obj)) {
+      const extracted = extractRoleFromStructure(v);
+      if (extracted) return extracted;
+    }
+  }
+  return null;
+}
+
+function resolveUserRole(data: Record<string, unknown> | null | undefined): string | null {
+  if (!data) return null;
+  return (
+    extractRoleFromStructure((data as any).role) ??
+    extractRoleFromStructure((data as any)?.perfil?.role) ??
+    extractRoleFromStructure((data as any)?.profile?.role) ??
+    extractRoleFromStructure((data as any).roles)
+  );
+}
+
 function mapEmployeeDoc(doc: FirestoreDoc) {
   const data = doc.data() ?? {};
 
@@ -401,44 +443,97 @@ export async function updateEmployee(req: Request, res: Response) {
     return res.status(400).json({ message: "O parâmetro 'id' é obrigatório." });
   }
 
-  const found = await findEmployeeDocument(id);
+  if (!req.user?.email) {
+    return res.status(401).json({ message: "Não autenticado" });
+  }
 
+  const found = await findEmployeeDocument(id);
   if (!found) {
     return res.status(404).json({ message: "Funcionário não encontrado." });
   }
 
-  const { docRef, collectionName } = found;
+  const { docRef, snapshot, collectionName } = found as { docRef: any; snapshot: DocumentSnapshot<DocumentData>; collectionName: string };
+  const currentData = (snapshot.exists ? (snapshot.data() as Record<string, unknown>) : {}) as Record<string, unknown>;
+
   const { nomeCompleto, matricula, funcao, fotoUrl } = req.body as EmployeeInput;
 
-  const nomeCompletoNormalizado = normalizeToString(nomeCompleto);
-  const matriculaNormalizada = normalizeToString(matricula);
-  const funcaoNormalizada = normalizeToString(funcao);
-  const fotoUrlNormalizada = normalizeToString(fotoUrl);
+  const nomeConclusivo = normalizeToString(nomeCompleto);
+  const matriculaValida = normalizeToString(matricula);
+  const funcaoValida = normalizeToString(funcao);
+  const fotoUrlValida = normalizeToString(fotoUrl);
 
-  if (!nomeCompletoNormalizado) {
-    return res.status(400).json({ message: "O campo 'nomeCompleto' é obrigatório." });
+  if (!nomeConclusivo) {
+    return res.status(400).json({ message: "O campo 'nome completo' é obrigatório." });
   }
-
-  if (!matriculaNormalizada) {
+  if (!matriculaValida) {
     return res.status(400).json({ message: "O campo 'matricula' é obrigatório." });
   }
+  if (!funcaoValida) {
+    return res.status(400).json({ message: "O campo 'funcao' es obligatória." });
+  }
 
-  if (!funcaoNormalizada) {
-    return res.status(400).json({ message: "O campo 'funcao' é obrigatório." });
+  const requesterEmail = req.user.email.toLowerCase();
+  const requesterDoc = await db.collection("users").doc(requesterEmail).get();
+  const requesterData = (requesterDoc.exists ? (requesterDoc.data() as Record<string, unknown>) : null) ?? null;
+  const requesterRole = (resolveUserRole(requesterData) || "").toLowerCase();
+
+  const currentFuncao = (() => {
+    const candidates: unknown[] = [
+      currentData["funcao"],
+      currentData["cargo"],
+      currentData["role"],
+      currentData["function"],
+      currentData["position"],
+      (currentData["perfil"] as any)?.["role"],
+      (currentData["profile"] as any)?.["role"],
+      (currentData["roles"] as any)?.["primary"],
+    ];
+    for (const c of candidates) {
+      const s = extractString(c);
+      if (s) return s;
+    }
+    return "";
+  })();
+
+  if (funcaoValida && funcaoValida.toLowerCase() !== currentFuncao.trim().toLowerCase() && requesterRole !== "supervisor") {
+    return res.status(403).json({ message: "Apenas supervisores podem alterar a função do funcionário." });
   }
 
   try {
-    await docRef.update({
-      nomeCompleto: nomeCompletoNormalizado,
-      matricula: matriculaNormalizada,
-      funcao: funcaoNormalizada,
-      fotoUrl: fotoUrlNormalizada || null,
+    const updates: Record<string, unknown> = {
+      nomeCompleto: nomeConclusivo,
+      matricula: matriculaValida,
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (fotoUrlValida) {
+      updates["fotoUrl"] = fotoUrlValida;
+    } else if (fotoUrl === null) {
+      updates["fotoUrl"] = null;
+    }
 
+    if (funcaoValida && funcaoValida.toLowerCase() !== currentFuncao.trim().toLowerCase()) {
+      // only supervisors can change role
+      if (requesterRole === "supervisor") {
+        if (WRITE_COLLECTION_OPTIONS.includes(collectionName)) {
+          updates["funcao"] = funcaoValida;
+        } else {
+          updates["role"] = funcaoValida;
+          const perfil = (currentData["perfil"] && typeof currentData["perfil"] === "object") ? { ...(currentData["perfil"] as any) } : {};
+          const profile = (currentData["profile"] && typeof currentData["profile"] === "object") ? { ...(currentData["profile"] as any) } : {};
+          const rolesObj = (currentData["roles"] && typeof currentData["roles"] === "object") ? { ...(currentData["roles"] as any) } : {};
+          (perfil as any)["role"] = funcaoValida;
+          (profile as any)["role"] = funcaoValida;
+          (rolesObj as any)["primary"] = funcaoValida;
+          updates["perfil"] = perfil;
+          updates["profile"] = profile;
+          updates["roles"] = rolesObj;
+        }
+      }
+    }
+
+    await docRef.update(updates);
     const updatedDoc = await docRef.get();
     rememberCollection(updatedDoc.id, collectionName);
-
     return res.json({ employee: mapEmployeeDoc(updatedDoc) });
   } catch (error) {
     console.error("Erro ao atualizar funcionário:", error);
@@ -453,13 +548,27 @@ export async function deleteEmployee(req: Request, res: Response) {
     return res.status(400).json({ message: "O parâmetro 'id' é obrigatório." });
   }
 
-  const found = await findEmployeeDocument(id);
+  if (!req.user?.email) {
+    return res.status(401).json({ message: "Não autenticado" });
+  }
 
+  const requesterEmail = (req.user.email || "").toLowerCase();
+  const requesterDoc = await db.collection("users").doc(requesterEmail).get();
+  const requesterData = (requesterDoc.exists ? (requesterDoc.data() as Record<string, unknown>) : null) ?? null;
+  const requesterRole = (resolveUserRole(requesterData) || "").toLowerCase();
+  if (requesterRole !== "supervisor") {
+    return res.status(403).json({ message: "Apenas supervisores podem remover funcionários." });
+  }
+
+  const found = await findEmployeeDocument(id);
   if (!found) {
     return res.status(404).json({ message: "Funcionário não encontrado." });
   }
 
-  const { docRef } = found;
+  const { docRef, collectionName } = found as { docRef: any; collectionName: string };
+  if (!WRITE_COLLECTION_OPTIONS.includes(collectionName)) {
+    return res.status(400).json({ message: "Este registro não pode ser removido por este endpoint." });
+  }
 
   try {
     await docRef.delete();

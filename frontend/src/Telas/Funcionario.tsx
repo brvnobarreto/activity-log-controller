@@ -81,12 +81,7 @@ export default function Funcionario() {
   const canManageAll = useMemo(() => {
     const normalizedRole = resolvedRole.trim().toLowerCase();
     if (!normalizedRole) return false;
-    if (normalizedRole === "superior") return true;
-    if (normalizedRole === "admin" || normalizedRole === "administrador") return true;
-    if (normalizedRole.includes("superior")) return true;
-    if (normalizedRole.includes("admin")) return true;
-    if (normalizedRole.includes("gestor") || normalizedRole.includes("gestão")) return true;
-    return false;
+    return normalizedRole === "supervisor";
   }, [resolvedRole]);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
@@ -531,7 +526,8 @@ export default function Funcionario() {
                 value={funcao}
                 onChange={(e) => setFuncao(e.target.value)}
                 placeholder="Digite a função"
-                disabled={isSaving}
+                className=""
+                disabled={!canManageAll || isSaving}
               />
             </div>
 
