@@ -33,7 +33,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 const DEFAULT_DEV_URL = "http://localhost:3100";
-const DEFAULT_PROD_URL = "https://app-alc.vercel.app";
+const DEFAULT_PROD_URL = "https://activity-log-controller.onrender.com";
 
 const rawFrontendUrl =
   process.env.FRONTEND_URL ||
