@@ -25,6 +25,7 @@ import morgan from "morgan";
 import authRoutes from "./routes/authRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
+import feedbackRoutes from "./routes/feedbackRoutes.js";
 
 // Carregar variáveis de ambiente do arquivo .env
 dotenv.config();
@@ -54,6 +55,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/activities', activityRoutes);
 // Rotas de funcionários (prefixo: /api/employees)
 app.use('/api/employees', employeeRoutes);
+// Rotas de feedbacks (prefixo: /api/feedbacks)
+app.use('/api/feedbacks', feedbackRoutes);
 
 // ============================================
 // INICIAR SERVIDOR

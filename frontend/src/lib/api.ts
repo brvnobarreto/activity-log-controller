@@ -1,4 +1,5 @@
-const DEFAULT_BASE_URL = "http://localhost:3001"
+const DEV_BASE_URL = "http://localhost:3001"
+const PROD_FALLBACK_BASE_URL = "https://api-app-alc.onrender.com"
 
 function sanitizePath(path: string) {
   if (!path) {
@@ -26,10 +27,14 @@ function getWindowOrigin() {
 }
 
 function sanitizeBase(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, "") || DEFAULT_BASE_URL
+  return baseUrl.replace(/\/+$/, "") || DEV_BASE_URL
 }
 
 export function resolveApiBaseUrl() {
+  if (import.meta.env.DEV) {
+    return DEV_BASE_URL
+  }
+
   const envBase = getEnvBaseUrl()
   if (envBase) {
     return envBase
@@ -40,7 +45,7 @@ export function resolveApiBaseUrl() {
     return windowOrigin
   }
 
-  return DEFAULT_BASE_URL
+  return PROD_FALLBACK_BASE_URL
 }
 
 export function buildApiUrl(path: string, baseUrl = resolveApiBaseUrl()) {

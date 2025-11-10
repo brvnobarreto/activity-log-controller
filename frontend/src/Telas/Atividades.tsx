@@ -1,12 +1,13 @@
 // TELA: Atividades - gerenciamento completo das ocorrências e formulários da operação
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import axios from "axios";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Camera, MapPin, Plus, Trash2, MessageCircle, CheckCircle, Clock, XCircle, Pencil, MoreVertical } from "lucide-react";
+import { Camera, MapPin, Plus, Trash2, MessageCircle, CheckCircle, Clock, XCircle, Pencil, MoreVertical, Loader2, Download } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/Auth/context/AuthContext";
 import {
@@ -24,12 +25,57 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getSessionToken } from "@/Auth/utils/sessionStorage";
+import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+
+type FeedbackEntry = {
+  id: string;
+  subject: string;
+  contentHtml: string;
+  contentText: string;
+  authorEmail: string;
+  authorName: string;
+  createdAt: string | null;
+  activityId?: string | null;
+};
 
 type AtividadesProps = {
   title?: string;
   filterByCurrentUser?: boolean;
   autoOpenNew?: boolean;
 };
+
+function normalizeRoleValue(value: unknown): string[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized.length ? [normalized] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeRoleValue(item));
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap((item) => normalizeRoleValue(item));
+  }
+  return [];
+}
+
+function userHasRole(user: { role?: unknown; perfil?: { role?: unknown } | null; profile?: { role?: unknown } | null; roles?: unknown } | null | undefined, role: string) {
+  const target = role.trim().toLowerCase();
+  if (!target.length) return false;
+
+  const roleValues = [
+    ...normalizeRoleValue(user?.role),
+    ...normalizeRoleValue(user?.perfil?.role),
+    ...normalizeRoleValue(user?.profile?.role),
+    ...normalizeRoleValue(user?.roles),
+  ];
+
+  return roleValues.some((value) => value.includes(target));
+}
 
 function formatDayLabel(dateValue: string | null | undefined) {
   if (!dateValue) {
@@ -48,6 +94,19 @@ function formatDayLabel(dateValue: string | null | undefined) {
   });
 
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatDateTime(dateValue: string | null | undefined) {
+  if (!dateValue) return "--";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function groupActivitiesByDay(list: Atividade[]) {
@@ -286,10 +345,11 @@ function getBlocoMSubLocalLabel(pavimentoNome: string, areaNome: string) {
 export default function Atividades({ title, filterByCurrentUser, autoOpenNew = false }: AtividadesProps = {}) {
   const isMobile = useIsMobile();
   const { sessionUser } = useAuth();
-  const normalizedRole = sessionUser?.role ? sessionUser.role.trim().toLowerCase() : undefined;
-  const isFiscal = normalizedRole === "fiscal";
+  const isFiscal = userHasRole(sessionUser, "fiscal");
+  const isSupervisor = userHasRole(sessionUser, "supervisor");
+  const apiBaseUrl = resolveApiBaseUrl();
   const effectiveFilterByCurrentUser = filterByCurrentUser ?? isFiscal;
-  const effectiveTitle = title ?? (isFiscal ? "Minhas Atividades" : "Atividades");
+  const effectiveTitle = title ?? "Registro de atividades";
   const location = useLocation();
   const navigate = useNavigate();
   // O contexto centraliza as operações de CRUD e o cache das atividades
@@ -337,8 +397,151 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
   const [hasRemovedPhoto, setHasRemovedPhoto] = useState(false);
   const [photoTouched, setPhotoTouched] = useState(false);
-  const [showCoordinateInputs, setShowCoordinateInputs] = useState(true);
+  // Mapa usado para marcar visualmente quais atividades possuem feedback pendente de leitura pelo fiscal.
+  const [feedbackActivityMap, setFeedbackActivityMap] = useState<Record<string, boolean>>({});
+  // Feedback exibido dentro do modal de detalhes da atividade.
+  const [selectedActivityFeedback, setSelectedActivityFeedback] = useState<FeedbackEntry | null>(null);
   
+  const feedbackSeenStorageKey = useMemo(() => {
+    if (!sessionUser?.email) return null;
+    return `feedbackSeen::${sessionUser.email.toLowerCase()}`;
+  }, [sessionUser?.email]);
+  // Exporta o registro completo de atividades para um arquivo XLSX,
+  // incluindo o feedback mais recente vinculado a cada uma (quando existir).
+  const exportarDashboardXlsx = useCallback(async () => {
+    if (!isSupervisor || !activities.length) return;
+
+    // Token da sessão: necessário para autenticar as requisições dos feedbacks.
+    const token = getSessionToken();
+    // Cache local com o feedback mais recente por atividade (evita duplicar requisições).
+    const feedbackMap: Record<string, FeedbackEntry | null> = {};
+
+    if (token) {
+      try {
+        const feedbackResponses = await Promise.all(
+          activities.map(async (atividade) => {
+            try {
+              const { data } = await axios.get<{ feedback: FeedbackEntry | null }>(
+                buildApiUrl(`/api/feedbacks/activity/${atividade.id}`, apiBaseUrl),
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                },
+              );
+              return [atividade.id, data?.feedback ?? null] as const;
+            } catch (error) {
+              console.warn(`Falha ao carregar feedback da atividade ${atividade.id} durante exportação.`, error);
+              return [atividade.id, null] as const;
+            }
+          }),
+        );
+
+        // Converte o array de respostas em um mapa indexado por ID da atividade.
+        feedbackResponses.forEach(([id, feedback]) => {
+          feedbackMap[id] = feedback;
+        });
+      } catch (error) {
+        console.warn("Erro ao preparar feedbacks para exportação.", error);
+      }
+    } else {
+      console.warn("Token ausente ao exportar atividades: feedbacks não serão incluídos.");
+    }
+
+    const worksheetData: (string | number)[][] = [
+      ["Registro de atividades"],
+      ["Gerado em", new Date().toLocaleString("pt-BR")],
+      ["Total de registros", activities.length],
+      [],
+      ["Data", "Descrição", "Responsável", "Email", "Local", "Sub-locais", "Status", "Feedback"],
+    ];
+
+    activities.forEach((atividade) => {
+      const feedbackEntry = feedbackMap[atividade.id] ?? null;
+      const feedbackValue = feedbackEntry
+        ? [
+            feedbackEntry.authorName || feedbackEntry.authorEmail || "Supervisor",
+            feedbackEntry.createdAt ? `(${formatDateTime(feedbackEntry.createdAt)})` : null,
+            feedbackEntry.contentText || feedbackEntry.subject || "",
+          ]
+            .filter((value): value is string => Boolean(value && value.trim().length))
+            .join(" - ")
+        : "--";
+
+      // Cada linha representa uma atividade registrada, com dados essenciais e resumo do feedback.
+      worksheetData.push([
+        atividade.createdAt ? formatDateTime(atividade.createdAt) : "--",
+        atividade.descricaoOriginal ?? atividade.registro ?? "--",
+        atividade.nome ?? "--",
+        atividade.createdBy ?? "--",
+        atividade.localPrincipal ?? "--",
+        Array.isArray(atividade.subLocais) ? atividade.subLocais.join(", ") : "--",
+        atividade.status ?? "--",
+        feedbackValue,
+      ]);
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+
+    // Ajusta larguras para facilitar a leitura do XLSX exportado.
+    const colCount = 8;
+    const colWidths = Array.from({ length: colCount }, (_, colIndex) => {
+      const maxLen = worksheetData.reduce((max, row) => {
+        const value = row[colIndex];
+        if (value == null) return max;
+        return Math.max(max, String(value).length);
+      }, 12);
+      return { wch: Math.min(Math.max(maxLen + 2, 14), 60) };
+    });
+    worksheet["!cols"] = colWidths;
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registro de Atividades");
+    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([buffer], { type: "application/octet-stream" });
+    const nome = `registro-atividades-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    saveAs(blob, nome);
+  }, [activities, apiBaseUrl, isSupervisor]);
+
+
+  const readSeenFeedbacks = useCallback(() => {
+    if (!feedbackSeenStorageKey) return new Set<string>();
+    try {
+      const raw = window.localStorage.getItem(feedbackSeenStorageKey);
+      if (!raw) return new Set<string>();
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set<string>(parsed.filter((value): value is string => typeof value === "string" && value.length > 0));
+      }
+    } catch (error) {
+      console.warn("Não foi possível ler feedbacks vistos do storage:", error);
+    }
+    return new Set<string>();
+  }, [feedbackSeenStorageKey]);
+
+  const persistSeenFeedbacks = useCallback(
+    (seen: Set<string>) => {
+      if (!feedbackSeenStorageKey) return;
+      try {
+        window.localStorage.setItem(feedbackSeenStorageKey, JSON.stringify(Array.from(seen)));
+      } catch (error) {
+        console.warn("Não foi possível salvar feedbacks vistos no storage:", error);
+      }
+    },
+    [feedbackSeenStorageKey],
+  );
+
+  const markFeedbackAsSeen = useCallback(
+    (activityId: string) => {
+      if (!feedbackSeenStorageKey) return;
+      const current = readSeenFeedbacks();
+      if (current.has(activityId)) return;
+      current.add(activityId);
+      persistSeenFeedbacks(current);
+    },
+    [feedbackSeenStorageKey, persistSeenFeedbacks, readSeenFeedbacks],
+  );
+
   // Estados para local e sublocais
   const [localSelecionado, setLocalSelecionado] = useState<string>("");
   const [subLocaisSelecionados, setSubLocaisSelecionados] = useState<Record<string, string>>({});
@@ -350,6 +553,11 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Atividade | null>(null);
   
+  const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false);
+  const [latestFeedback, setLatestFeedback] = useState<FeedbackEntry | null>(null);
+  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
   const isEditing = Boolean(editingActivityId);
   const isBlocoMSelecionado = localSelecionado === BLOCO_M_ID;
   const temSubLocalSelecionado = Object.keys(subLocaisSelecionados).length > 0;
@@ -368,6 +576,236 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   !isCompressingPhoto &&
     photoData !== null &&
     hasCoordinates;
+
+  // Atualiza o mapa de destaque das atividades (true = feedback visível na lista).
+  const updateFeedbackHighlight = useCallback(
+    (activityId: string, hasFeedback: boolean) => {
+      setFeedbackActivityMap((prev) => {
+        if (hasFeedback) {
+          if (!isFiscal) {
+            return prev;
+          }
+          if (prev[activityId]) return prev;
+          return { ...prev, [activityId]: true };
+        }
+
+        if (!prev[activityId]) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        delete next[activityId];
+        return next;
+      });
+
+      if (!hasFeedback && isFiscal) {
+        markFeedbackAsSeen(activityId);
+      }
+    },
+    [isFiscal, markFeedbackAsSeen],
+  );
+
+  // Fiscal abre o painel de feedback: carregamos o conteúdo mais recente.
+  const handleOpenFeedbackDialog = useCallback(
+    async (activity: Atividade) => {
+      setIsFeedbackDialogOpen(true);
+      setIsLoadingFeedback(true);
+      setFeedbackError(null);
+      setLatestFeedback(null);
+
+      const token = getSessionToken();
+      if (!token) {
+        setIsLoadingFeedback(false);
+        setFeedbackError("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
+      try {
+        const { data } = await axios.get<{ feedback: FeedbackEntry | null }>(
+          buildApiUrl(`/api/feedbacks/activity/${activity.id}`, apiBaseUrl),
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const feedback = data?.feedback ?? null;
+        setLatestFeedback(feedback);
+        // Fiscal visualizou: removemos o destaque local para não manter o aviso.
+        if (feedback && isFiscal) {
+          updateFeedbackHighlight(activity.id, false);
+        }
+
+        if (!feedback) {
+          setFeedbackError("Nenhum feedback disponível no momento.");
+        }
+      } catch (error) {
+        console.error("Erro ao carregar feedback da atividade:", error);
+        setFeedbackError("Não foi possível carregar o feedback. Tente novamente.");
+      } finally {
+        setIsLoadingFeedback(false);
+      }
+    },
+    [apiBaseUrl, isFiscal, updateFeedbackHighlight],
+  );
+
+  const renderActionMenu = (atividade: Atividade, triggerClassName?: string) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("h-8 w-8", triggerClassName)}
+          aria-label="Mais opções"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+        {(isFiscal || isSupervisor) && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              if (isFiscal) {
+                void handleOpenFeedbackDialog(atividade);
+              } else if (isSupervisor) {
+                window.dispatchEvent(
+                  new CustomEvent("open-feedback-sheet", {
+                    detail: {
+                      activity: {
+                        id: atividade.id,
+                        createdBy: atividade.createdBy ?? null,
+                        nome: atividade.nome ?? null,
+                      },
+                    },
+                  }),
+                );
+              }
+            }}
+          >
+            <MessageCircle className="mr-2 h-4 w-4" />
+            {isFiscal ? "Ver feedback" : "Feedback"}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            startEditActivity(atividade);
+          }}
+        >
+          <Pencil className="mr-2 h-4 w-4" />
+          Editar
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          disabled={isDeleting}
+          onSelect={(event) => {
+            event.preventDefault();
+            handleDeleteActivity(atividade);
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          {isDeleting ? "Removendo..." : "Remover"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // Ao montar, fiscais carregam a lista de atividades com feedback destinado a eles.
+  useEffect(() => {
+    if (!sessionUser?.email) {
+      setFeedbackActivityMap({});
+      return;
+    }
+
+    if (!isFiscal) {
+      setFeedbackActivityMap({});
+      return;
+    }
+
+    const token = getSessionToken();
+    if (!token) {
+      setFeedbackActivityMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchFeedbackHighlights = async () => {
+      try {
+        const { data } = await axios.get<{ activities?: string[] }>(
+          buildApiUrl("/api/feedbacks/mine", apiBaseUrl),
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (cancelled) return;
+
+        const seen = readSeenFeedbacks();
+        const nextMap: Record<string, boolean> = {};
+        if (Array.isArray(data.activities)) {
+          data.activities.forEach((activityId) => {
+            if (typeof activityId === "string" && activityId.trim().length > 0) {
+              const trimmedId = activityId.trim();
+              if (!seen.has(trimmedId)) {
+                nextMap[trimmedId] = true;
+              }
+            }
+          });
+        }
+        setFeedbackActivityMap(nextMap);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Erro ao carregar feedbacks atribuídos:", error);
+        }
+      }
+    };
+
+    fetchFeedbackHighlights();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl, isFiscal, readSeenFeedbacks, sessionUser?.email]);
+
+  // Carrega o feedback da atividade quando abrimos o modal de detalhes.
+  const loadActivityFeedback = useCallback(
+    async (activity: Atividade) => {
+      const token = getSessionToken();
+      if (!token) {
+        setSelectedActivityFeedback(null);
+        return;
+      }
+
+      try {
+        const { data } = await axios.get<{ feedback: FeedbackEntry | null }>(
+          buildApiUrl(`/api/feedbacks/activity/${activity.id}`, apiBaseUrl),
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const feedback = data?.feedback ?? null;
+        setSelectedActivityFeedback(feedback);
+        if (feedback && isFiscal) {
+          updateFeedbackHighlight(activity.id, false);
+        } else {
+          updateFeedbackHighlight(activity.id, Boolean(feedback));
+        }
+      } catch (error) {
+        console.error("Erro ao carregar feedback da atividade:", error);
+        setSelectedActivityFeedback(null);
+      }
+    },
+    [apiBaseUrl, isFiscal, updateFeedbackHighlight],
+  );
 
   // Função utilitária para limpar completamente o formulário da atividade
   const resetForm = useCallback(() => {
@@ -390,10 +828,10 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setLocationError(null);
     setLocationTouched(false);
     setPhotoTouched(false);
-    setShowCoordinateInputs(true);
     setLocalSelecionado("");
     setSubLocaisSelecionados({});
     setPavimentoSelecionado("");
+    setSelectedActivityFeedback(null);
   }, []);
 
   // Preenche o formulário com os dados existentes quando estamos editando
@@ -418,8 +856,6 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setLocationError(null);
     setLocationTouched(false);
     setPhotoTouched(false);
-    setShowCoordinateInputs(true);
-
     const localMatch = locaisDisponiveis.find((local) => {
       if (!activity.localPrincipal) return false;
       return local.nome.toLowerCase() === activity.localPrincipal.toLowerCase() || local.id === activity.localPrincipal;
@@ -580,12 +1016,15 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       if (selectedActivity?.id === pendingDelete.id) {
         setSelectedActivity(null);
         setIsDetailOpen(false);
+        setSelectedActivityFeedback(null);
       }
 
       if (editingActivityId === pendingDelete.id) {
         setEditingActivityId(null);
         resetForm();
       }
+
+      updateFeedbackHighlight(pendingDelete.id, false);
     } catch (error) {
       console.error("Erro ao remover atividade:", error);
     } finally {
@@ -593,7 +1032,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       setIsConfirmDeleteOpen(false);
       setPendingDelete(null);
     }
-  }, [deleteActivity, editingActivityId, pendingDelete, resetForm, scope, selectedActivity]);
+  }, [deleteActivity, editingActivityId, pendingDelete, resetForm, scope, selectedActivity, updateFeedbackHighlight]);
 
   function handleCancel() {
     setIsDialogOpen(false);
@@ -603,12 +1042,15 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
   function openActivityDetail(activity: Atividade) {
     setSelectedActivity(activity);
+    setSelectedActivityFeedback(null);
     setIsDetailOpen(true);
+    void loadActivityFeedback(activity);
   }
 
   function closeActivityDetail() {
     setIsDetailOpen(false);
     setSelectedActivity(null);
+    setSelectedActivityFeedback(null);
   }
 
   async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
@@ -684,7 +1126,6 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
             setLng(longitude);
             setLatInput(latitude.toString());
             setLngInput(longitude.toString());
-            setShowCoordinateInputs(false);
             resolve();
           },
           (err) => reject(err),
@@ -697,90 +1138,24 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       setLng("");
       setLatInput("");
       setLngInput("");
-      setShowCoordinateInputs(true);
     } finally {
       setIsLocating(false);
     }
   }
 
-  function handleManualLatitudeChange(value: string) {
-    if (!showCoordinateInputs) {
-      setShowCoordinateInputs(true);
-    }
-    setLatInput(value);
-    setLocationTouched(true);
+/* function handleManualLatitudeChange(value: string) {
+  // Entrada manual de latitude desabilitada temporariamente.
+}
 
-    const normalized = value.replace(",", ".").trim();
-    if (normalized === "" || normalized === "-" || normalized === "." || normalized === "-.") {
-      setLat("");
-      setLocationError("Informe latitude e longitude.");
-      return;
-    }
-
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) {
-      setLat("");
-      setLocationError("Latitude inválida.");
-      return;
-    }
-
-    if (parsed < -90 || parsed > 90) {
-      setLat("");
-      setLocationError("Latitude deve estar entre -90 e 90.");
-      return;
-    }
-
-    const finalValue = Number(parsed.toFixed(6));
-    setLat(finalValue);
-    if (typeof lng === "number") {
-      setLocationError(null);
-    } else {
-      setLocationError("Informe latitude e longitude.");
-    }
-  }
-
-  function handleManualLongitudeChange(value: string) {
-    if (!showCoordinateInputs) {
-      setShowCoordinateInputs(true);
-    }
-    setLngInput(value);
-    setLocationTouched(true);
-
-    const normalized = value.replace(",", ".").trim();
-    if (normalized === "" || normalized === "-" || normalized === "." || normalized === "-.") {
-      setLng("");
-      setLocationError("Informe latitude e longitude.");
-      return;
-    }
-
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) {
-      setLng("");
-      setLocationError("Longitude inválida.");
-      return;
-    }
-
-    if (parsed < -180 || parsed > 180) {
-      setLng("");
-      setLocationError("Longitude deve estar entre -180 e 180.");
-      return;
-    }
-
-    const finalValue = Number(parsed.toFixed(6));
-    setLng(finalValue);
-    if (typeof lat === "number") {
-      setLocationError(null);
-    } else {
-      setLocationError("Informe latitude e longitude.");
-    }
-  }
+function handleManualLongitudeChange(value: string) {
+  // Entrada manual de longitude desabilitada temporariamente.
+} */
 
   function handleClearLocation() {
     setLat("");
     setLng("");
     setLatInput("");
     setLngInput("");
-    setShowCoordinateInputs(true);
     setLocationTouched(true);
     setLocationError("Informe latitude e longitude.");
   }
@@ -858,23 +1233,40 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">{effectiveTitle}</h1>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-bold">{effectiveTitle}</h1>
+        {isSupervisor && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Link to="/relatorios" className="inline-flex items-center gap-1 underline underline-offset-4 hover:text-foreground">
-                <span>Média de registro semanal:</span>
-                <span className="font-medium text-foreground">{mediaSemanal}</span>
-              </Link>
+              <Button
+                onClick={exportarDashboardXlsx}
+                variant="outline"
+                size="icon"
+                className="ml-auto"
+                aria-label="Exportar registro de atividades em XLSX"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
             </TooltipTrigger>
-            <TooltipContent>
-              Ir para Relatórios
-            </TooltipContent>
+            <TooltipContent>Exportar XLSX</TooltipContent>
           </Tooltip>
-        </div>
+        )}
       </div>
-      
+
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link to="/relatorios" className="inline-flex items-center gap-1 underline underline-offset-4 hover:text-foreground">
+              <span>Média de registro semanal:</span>
+              <span className="font-medium text-foreground">{mediaSemanal}</span>
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>
+            Ir para Relatórios
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
       {isLoadingActivities && groupedEntries.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 p-10 text-center text-sm text-muted-foreground">
           Carregando atividades...
@@ -896,149 +1288,211 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
             </div>
             
             <div className="space-y-4">
-              <table className="w-full table-fixed border-separate border-spacing-y-4">
-                <thead>
-                  <tr className="text-sm font-medium text-gray-600">
-                    {!effectiveFilterByCurrentUser && <th className="pb-3 px-4 w-2/12 text-left">Nome</th>}
-                    <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-3/12" : "w-2/12"} text-left`}>Local</th>
-                    <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-5/12" : "w-4/12"} text-left`}>Descrição</th>
-                    <th className="pb-3 px-4 w-1/12 text-center">Nível</th>
-                    <th className="pb-3 px-4 w-1/12 text-center">Status</th>
-                    <th className="pb-3 px-4 w-2/12 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {atividades.map((atividade) => {
-                    const descricaoVisivel = atividade.descricaoOriginal ?? atividade.registro;
+              <div className="space-y-3 md:hidden">
+                {atividades.map((atividade) => {
+                  const descricaoVisivel = atividade.descricaoOriginal ?? atividade.registro;
+                  const hasSupervisorFeedback = Boolean(feedbackActivityMap[atividade.id]);
+                  const indicator = hasSupervisorFeedback ? (
+                    <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                  ) : null;
 
-                    return (
-                      <tr
-                        key={atividade.id}
-                        className="group align-middle cursor-pointer focus:outline-none"
-                        onClick={() => openActivityDetail(atividade)}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`Ver detalhes da atividade de ${atividade.nome}`}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            openActivityDetail(atividade);
-                          }
-                        }}
-                      >
-                        {!effectiveFilterByCurrentUser && (
-                          <td className="bg-gray-50 px-4 py-4 text-left text-sm font-medium text-gray-800 rounded-l-lg transition-colors group-hover:bg-gray-100">
-                            {atividade.nome}
-                          </td>
-                        )}
-
-                        <td
-                          className={`bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100 ${
-                            effectiveFilterByCurrentUser ? "rounded-l-lg" : ""
-                          }`}
-                        >
-                          {atividade.localPrincipal ?? "--"}
-                        </td>
-
-                        <td className={`bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100 ${effectiveFilterByCurrentUser ? "" : ""}`}>
-                          <span className="break-words">{descricaoVisivel}</span>
-                        </td>
-
-                        <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100">
-                          {isMobile ? (
-                            <div
-                              className={`mx-auto h-6 w-6 rounded-full ${getNivelColor(atividade.nivel)}`}
-                              aria-label={`Nível: ${atividade.nivel}`}
-                              role="img"
-                            />
-                          ) : (
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
-                                atividade.nivel === "Máximo"
-                                  ? "bg-red-100 text-red-800"
-                                  : atividade.nivel === "Alto"
-                                  ? "bg-orange-100 text-orange-800"
-                                  : atividade.nivel === "Normal"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-green-100 text-green-800"
-                              }`}
-                            >
-                              {atividade.nivel}
-                            </span>
+                  return (
+                    <div
+                      key={atividade.id}
+                      className={cn(
+                        "group relative flex cursor-pointer flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-colors focus:outline-none hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100",
+                        hasSupervisorFeedback && "ring-2 ring-amber-400 ring-offset-2 ring-offset-white",
+                      )}
+                      onClick={() => openActivityDetail(atividade)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Ver detalhes da atividade de ${atividade.nome}`}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openActivityDetail(atividade);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-2">
+                          {!effectiveFilterByCurrentUser && (
+                            <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                              {indicator}
+                              <span className="truncate">{atividade.nome}</span>
+                              {hasSupervisorFeedback && (
+                                <span className="sr-only">Esta atividade possui feedback do supervisor.</span>
+                              )}
+                            </div>
                           )}
-                        </td>
-
-                        <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100">
-                          {isMobile ? (
-                            getStatusIcon(atividade.status)
-                          ) : (
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
-                                atividade.status === "Concluído"
-                                  ? "bg-green-100 text-green-800"
-                                  : atividade.status === "Pendente"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {atividade.status}
-                            </span>
-                          )}
-                        </td>
-                        
-                        <td className="bg-gray-50 px-4 py-4 transition-colors group-hover:bg-gray-100 rounded-r-lg">
-                          <div className="flex justify-end">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Mais opções"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.preventDefault();
-                                    const msg = encodeURIComponent(`Feedback sobre a atividade ${atividade.id}`);
-                                    window.open(`https://wa.me/5585999999999?text=${msg}`, "_blank");
-                                  }}
-                                >
-                                  <MessageCircle className="mr-2 h-4 w-4" />
-                                  Feedback
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onSelect={(event) => {
-                                    event.preventDefault();
-                                    startEditActivity(atividade);
-                                  }}
-                                >
-                                  <Pencil className="mr-2 h-4 w-4" />
-                                  Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  disabled={isDeleting}
-                                  onSelect={(event) => {
-                                    event.preventDefault();
-                                    handleDeleteActivity(atividade);
-                                  }}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  {isDeleting ? "Removendo..." : "Remover"}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            {effectiveFilterByCurrentUser ? indicator : null}
+                            {effectiveFilterByCurrentUser && hasSupervisorFeedback && (
+                              <span className="sr-only">Esta atividade possui feedback do supervisor.</span>
+                            )}
+                            <MapPin className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                            <span className="truncate">{atividade.localPrincipal ?? "--"}</span>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                        {renderActionMenu(atividade, "-mr-1")}
+                      </div>
+
+                      <div className="text-sm text-gray-700">
+                        <span className="block break-words">{descricaoVisivel}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2 py-1",
+                            atividade.nivel === "Máximo"
+                              ? "bg-red-100 text-red-800"
+                              : atividade.nivel === "Alto"
+                                ? "bg-orange-100 text-orange-800"
+                                : atividade.nivel === "Normal"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-green-100 text-green-800",
+                          )}
+                        >
+                          {atividade.nivel}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2 py-1 text-gray-700">
+                          {getStatusIcon(atividade.status)}
+                          <span>{atividade.status}</span>
+                        </span>
+                        {atividade.createdAt ? (
+                          <span className="text-gray-500">{formatDateTime(atividade.createdAt)}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block">
+                <table className="w-full table-fixed border-separate border-spacing-y-4">
+                  <thead>
+                    <tr className="text-sm font-medium text-gray-600">
+                      {!effectiveFilterByCurrentUser && <th className="pb-3 px-4 w-2/12 text-left">Nome</th>}
+                      <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-3/12" : "w-2/12"} text-left`}>Local</th>
+                      <th className={`pb-3 px-4 ${effectiveFilterByCurrentUser ? "w-5/12" : "w-4/12"} text-left`}>Descrição</th>
+                      <th className="pb-3 px-4 w-1/12 text-center">Nível</th>
+                      <th className="pb-3 px-4 w-1/12 text-center">Status</th>
+                      <th className="pb-3 px-4 w-2/12 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {atividades.map((atividade) => {
+                      const descricaoVisivel = atividade.descricaoOriginal ?? atividade.registro;
+                      const hasSupervisorFeedback = Boolean(feedbackActivityMap[atividade.id]);
+                      const indicator =
+                        hasSupervisorFeedback ? (
+                          <span
+                            className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                            aria-hidden="true"
+                          />
+                        ) : null;
+
+                      return (
+                        <tr
+                          key={atividade.id}
+                          className={cn(
+                            "group align-middle cursor-pointer focus:outline-none",
+                            hasSupervisorFeedback && "relative ring-2 ring-amber-400 ring-offset-2 ring-offset-white rounded-lg",
+                          )}
+                          onClick={() => openActivityDetail(atividade)}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Ver detalhes da atividade de ${atividade.nome}`}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openActivityDetail(atividade);
+                            }
+                          }}
+                        >
+                          {!effectiveFilterByCurrentUser && (
+                            <td className="bg-gray-50 px-4 py-4 text-left text-sm font-medium text-gray-800 rounded-l-lg transition-colors group-hover:bg-gray-100">
+                              <div className="flex items-center gap-2">
+                                {indicator}
+                                <span>{atividade.nome}</span>
+                                {hasSupervisorFeedback && (
+                                  <span className="sr-only">Esta atividade possui feedback do supervisor.</span>
+                                )}
+                              </div>
+                            </td>
+                          )}
+
+                          <td
+                            className={cn(
+                              "bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100",
+                              effectiveFilterByCurrentUser && "rounded-l-lg",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              {effectiveFilterByCurrentUser ? indicator : null}
+                              <span>{atividade.localPrincipal ?? "--"}</span>
+                              {effectiveFilterByCurrentUser && hasSupervisorFeedback && (
+                                <span className="sr-only">Esta atividade possui feedback do supervisor.</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="bg-gray-50 px-4 py-4 text-left text-sm text-gray-600 transition-colors group-hover:bg-gray-100">
+                            <span className="break-words">{descricaoVisivel}</span>
+                          </td>
+
+                          <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100">
+                            {isMobile ? (
+                              <div
+                                className={`mx-auto h-6 w-6 rounded-full ${getNivelColor(atividade.nivel)}`}
+                                aria-label={`Nível: ${atividade.nivel}`}
+                                role="img"
+                              />
+                            ) : (
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                                  atividade.nivel === "Máximo"
+                                    ? "bg-red-100 text-red-800"
+                                    : atividade.nivel === "Alto"
+                                    ? "bg-orange-100 text-orange-800"
+                                    : atividade.nivel === "Normal"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-green-100 text-green-800"
+                                }`}
+                              >
+                                {atividade.nivel}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="bg-gray-50 px-4 py-4 text-center transition-colors group-hover:bg-gray-100">
+                            {isMobile ? (
+                              getStatusIcon(atividade.status)
+                            ) : (
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${
+                                  atividade.status === "Concluído"
+                                    ? "bg-green-100 text-green-800"
+                                    : atividade.status === "Pendente"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {atividade.status}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="bg-gray-50 px-4 py-4 transition-colors group-hover:bg-gray-100 rounded-r-lg">
+                            <div className="flex justify-end">{renderActionMenu(atividade)}</div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         ))
@@ -1368,7 +1822,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
                 </div>
                 <span id="localizacao-descricao" className="sr-only">Use a localização atual do dispositivo ou informe manualmente as coordenadas.</span>
 
-                {showCoordinateInputs && (
+                {/* {showCoordinateInputs && (
                   <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
                     <div className="grid gap-1">
                       <Label htmlFor="latitude">Latitude</Label>
@@ -1395,7 +1849,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
                       />
                     </div>
                   </div>
-                )}
+                )} */}
 
                 {hasCoordinates && (
                   <p className="text-xs text-muted-foreground">
@@ -1406,20 +1860,18 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
                 <p
                   id="location-feedback"
                   className={`text-xs ${
-                    locationError
+                    locationError || (locationTouched && !hasCoordinates)
                       ? "text-destructive"
-                      : locationTouched && !hasCoordinates
-                        ? "text-destructive"
-                        : "text-muted-foreground"
+                      : "text-muted-foreground"
                   }`}
                 >
                   {locationError
                     ? locationError
                     : locationTouched && !hasCoordinates
-                      ? "Informe latitude e longitude válidas."
-                      : showCoordinateInputs
-                        ? "Use o botão ou informe manualmente as coordenadas (latitude entre -90 e 90, longitude entre -180 e 180)."
-                        : "Coordenadas preenchidas automaticamente. Clique em \"Limpar localização\" para editar manualmente."}
+                      ? "Não foi possível registrar as coordenadas automaticamente."
+                      : hasCoordinates
+                        ? "Coordenadas definidas automaticamente."
+                        : "Use o botão para capturar sua localização atual."}
                 </p>
               </div>
 
@@ -1437,7 +1889,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
       {/* Activity Detail Modal */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalhes da Atividade</DialogTitle>
             <DialogDescription className="sr-only">
@@ -1540,7 +1992,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
                           type="button"
                           variant="outline"
                           className="h-8 px-3 text-xs"
-                          onClick={() => window.open(mapsUrl, "_blank")}
+                  onClick={() => window.open(mapsUrl, "_blank", "noopener,noreferrer")}
                         >
                           <MapPin className="mr-1 h-3 w-3" />
                           Abrir no Maps
@@ -1568,18 +2020,44 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">Descrição registrada</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground">Atividade registrada</h3>
                   <p className="rounded-md bg-gray-100 p-4 text-sm text-gray-700 whitespace-pre-line">
                     {descricaoLimpa}
                   </p>
                 </div>
+
+                {/* Exibe o feedback diretamente no modal quando houver um registro associado. */}
+                {selectedActivityFeedback && (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-muted-foreground">Feedback do supervisor</h3>
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      <p className="font-semibold text-amber-900 flex flex-wrap items-center gap-2">
+                        <span>{selectedActivityFeedback.authorName || "Supervisor"}</span>
+                        {selectedActivityFeedback.createdAt ? (
+                          <span className="text-xs font-normal text-amber-700">
+                            {formatDateTime(selectedActivityFeedback.createdAt)}
+                          </span>
+                        ) : null}
+                      </p>
+                      <div
+                        className="mt-2 space-y-2 text-sm leading-relaxed text-amber-900 [&_*]:break-words [&_*]:text-amber-900"
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            selectedActivityFeedback.contentHtml?.length
+                              ? selectedActivityFeedback.contentHtml
+                              : selectedActivityFeedback.contentText ?? "",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
           
       <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Button 
-          onClick={() => window.open('https://wa.me/5585999999999', '_blank')}
+          onClick={() => window.open('https://wa.me/5585999999999', '_blank', 'noopener,noreferrer')}
           className="bg-green-500 hover:bg-green-600 text-white"
         >
           <MessageCircle className="h-4 w-4" />
@@ -1589,6 +2067,77 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
           <Button variant="outline" onClick={closeActivityDetail}>Fechar</Button>
         </div>
       </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isFeedbackDialogOpen}
+        onOpenChange={(open) => {
+          setIsFeedbackDialogOpen(open);
+          if (!open) {
+            setIsLoadingFeedback(false);
+            setFeedbackError(null);
+            setLatestFeedback(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Feedback do supervisor</DialogTitle>
+            <DialogDescription className="sr-only">
+              Feedback enviado pelo supervisor para o fiscal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            {isLoadingFeedback ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="ml-2 text-sm">Carregando feedback...</span>
+              </div>
+            ) : feedbackError ? (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {feedbackError}
+              </p>
+            ) : latestFeedback ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {latestFeedback.subject || "Feedback"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Enviado por{" "}
+                    <span className="font-medium text-foreground">
+                      {latestFeedback.authorName || latestFeedback.authorEmail || "Supervisor"}
+                    </span>
+                    {latestFeedback.createdAt
+                      ? ` em ${formatDateTime(latestFeedback.createdAt)}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="max-h-[50vh] overflow-y-auto rounded-md border border-input bg-muted/30 p-4">
+                  {latestFeedback.contentHtml ? (
+                    <div
+                      className="space-y-3 text-sm leading-relaxed text-foreground [&_*]:break-words"
+                      dangerouslySetInnerHTML={{ __html: latestFeedback.contentHtml }}
+                    />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                      {latestFeedback.contentText || "Sem conteúdo disponível."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum feedback disponível.</p>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4 pt-3">
+            <Button variant="outline" onClick={() => setIsFeedbackDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

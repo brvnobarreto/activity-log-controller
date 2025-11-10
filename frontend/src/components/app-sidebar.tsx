@@ -2,6 +2,7 @@ import * as React from "react"
 import { useEffect, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { LayoutDashboard, Users, BarChart3, MapPin } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import axios from "axios"
 
 import { SearchForm } from "@/components/search-form"
@@ -24,10 +25,17 @@ import { useAuth } from "@/Auth/context/AuthContext"
 import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 
 // Navigation data for the sidebar
-const data = {
+type NavItem = {
+  title: string
+  url: string
+  icon: LucideIcon
+  rolesAllowed?: string[]
+}
+
+const data: { navItems: NavItem[] } = {
   navItems: [
     {
-      title: "Dashboard",
+      title: "Atividades",
       url: "/dashboard",
       icon: LayoutDashboard,
     },
@@ -40,6 +48,7 @@ const data = {
       title: "Relatórios",
       url: "/relatorios",
       icon: BarChart3,
+      rolesAllowed: ["supervisor"],
     },
     {
       title: "Campus",
@@ -91,7 +100,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     fetchUser()
   }, [apiBaseUrl, refreshSessionUser])
 
-  const navItems = data.navItems
+  const normalizedRole = userInfo?.role ? userInfo.role.trim().toLowerCase() : null
+  const navItems = data.navItems.filter((item) => {
+    if (!item.rolesAllowed || item.rolesAllowed.length === 0) {
+      return true
+    }
+    if (!normalizedRole) {
+      return false
+    }
+    return item.rolesAllowed.some((role) => role.trim().toLowerCase() === normalizedRole)
+  })
 
   return (
     <Sidebar {...props}>

@@ -7,7 +7,7 @@ import Atividades from "./Atividades";
 import { useLocation } from "react-router-dom";
 
 export default function Dashboard() {
-  usePageTitle('Dashboard');
+  usePageTitle('Atividades');
 
   const STORAGE_KEY = "dashboard:lastTab";
   const location = useLocation();
@@ -57,7 +57,7 @@ export default function Dashboard() {
       >
         <TabsList className="mx-auto">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="activities">Atividades</TabsTrigger>
+          <TabsTrigger value="activities">Dashboard</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="flex-1">
           <div className="w-full h-full p-4 border rounded-lg">

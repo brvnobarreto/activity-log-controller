@@ -210,7 +210,7 @@ export default function Overview() {
               Estamos preparando indicadores específicos para o time de fiscalização.
             </p>
             <p className="text-sm text-muted-foreground">
-              Enquanto isso, utilize a aba Atividades para registrar e acompanhar suas ações.
+              Enquanto isso, utilize a aba Dashboard para registrar e acompanhar suas ações.
             </p>
           </section>
         </div>

@@ -314,17 +314,7 @@ export default function Funcionario() {
 
   return (
     <div className="space-y-6 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">Em atividade: {emAtividade}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => loadFuncionarios({ force: true })}
-          disabled={isLoading}
-        >
-          {isLoading ? "Carregando..." : "Recarregar"}
-        </Button>
-      </div>
+      <p className="text-sm text-muted-foreground">Em atividade: {emAtividade}</p>
 
       {pageError ? (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
