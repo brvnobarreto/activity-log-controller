@@ -419,13 +419,23 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     [normalizedUserEmail],
   );
 
+  // IDs de atividades com feedback destinado ao fiscal logado (obtidos via /api/feedbacks/mine).
+  const [feedbackActivityMap, setFeedbackActivityMap] = useState<Record<string, boolean>>({});
+
   const scope: ActivityScope = effectiveFilterByCurrentUser ? "personal" : "global";
 
   // Define a lista base (global ou pessoal) dependendo das props da tela
-  const activities = useMemo(
+  const baseActivities = useMemo(
     () => (effectiveFilterByCurrentUser ? personalActivities : globalActivities),
-    [effectiveFilterByCurrentUser, personalActivities, globalActivities]
+    [effectiveFilterByCurrentUser, personalActivities, globalActivities],
   );
+
+  // Fiscal: mostra somente atividades que possuem feedback destinado a ele (targetEmail == email logado).
+  const activities = useMemo(() => {
+    if (!isFiscal) return baseActivities;
+    const targetedIds = new Set(Object.keys(feedbackActivityMap || {}));
+    return baseActivities.filter((item) => targetedIds.has(item.id));
+  }, [baseActivities, feedbackActivityMap, isFiscal]);
 
   const groupedActivities = useMemo(() => groupActivitiesByDay(activities), [activities]);
   const groupedEntries = useMemo(() => Array.from(groupedActivities.entries()), [groupedActivities]);
@@ -455,7 +465,6 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   const [hasRemovedPhoto, setHasRemovedPhoto] = useState(false);
   const [photoTouched, setPhotoTouched] = useState(false);
   // Mapa usado para marcar visualmente quais atividades possuem feedback pendente de leitura pelo fiscal.
-  const [feedbackActivityMap, setFeedbackActivityMap] = useState<Record<string, boolean>>({});
   // Feedback exibido dentro do modal de detalhes da atividade.
   const [selectedActivityFeedback, setSelectedActivityFeedback] = useState<FeedbackEntry | null>(null);
   
