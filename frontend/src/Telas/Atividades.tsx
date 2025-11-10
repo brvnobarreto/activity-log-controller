@@ -421,6 +421,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
   // IDs de atividades com feedback destinado ao fiscal logado (obtidos via /api/feedbacks/mine).
   const [feedbackActivityMap, setFeedbackActivityMap] = useState<Record<string, boolean>>({});
+  const [targetedActivityIndex, setTargetedActivityIndex] = useState<Record<string, true>>({});
 
   const scope: ActivityScope = effectiveFilterByCurrentUser ? "personal" : "global";
 
@@ -436,7 +437,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   // Unimos ambos os conjuntos preservando a ordem base e evitando duplicidade.
   const activities = useMemo(() => {
     if (!isFiscal) return baseActivities;
-    const targetedIds = new Set(Object.keys(feedbackActivityMap || {}));
+    const targetedIds = targetedActivityIndex;
     const merged = new Map<string, Atividade>();
     // Sempre começa pela base (pessoal ou global, conforme tela)
     for (const item of baseActivities) {
@@ -448,12 +449,12 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     }
     // Inclui as com feedback direcionado (que podem não ser do próprio fiscal)
     for (const item of globalActivities) {
-      if (targetedIds.has(item.id)) {
+      if (targetedIds[item.id]) {
         merged.set(item.id, item);
       }
     }
     return Array.from(merged.values());
-  }, [baseActivities, feedbackActivityMap, globalActivities, isFiscal, personalActivities]);
+  }, [baseActivities, globalActivities, isFiscal, personalActivities, targetedActivityIndex]);
 
   const groupedActivities = useMemo(() => groupActivitiesByDay(activities), [activities]);
   const groupedEntries = useMemo(() => Array.from(groupedActivities.entries()), [groupedActivities]);
@@ -721,7 +722,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     (activityId: string, hasFeedback: boolean) => {
       setFeedbackActivityMap((prev) => {
         if (hasFeedback) {
-          if (!isFiscal) {
+          if (!isFiscal || !targetedActivityIndex[activityId]) {
             return prev;
           }
           if (prev[activityId]) return prev;
@@ -741,14 +742,15 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         markFeedbackAsSeen(activityId);
       }
     },
-    [isFiscal, markFeedbackAsSeen],
+    [isFiscal, markFeedbackAsSeen, targetedActivityIndex],
   );
 
   // Fiscal abre o painel de feedback: carregamos o conteúdo mais recente.
   // Fiscal abre o painel de feedback: buscamos o texto mais recente e removemos o destaque.
   const handleOpenFeedbackDialog = useCallback(
     async (activity: Atividade) => {
-      if (isFiscal && !isActivityOwnedByUser(activity)) {
+      const isTargeted = Boolean(targetedActivityIndex[activity.id]);
+      if (isFiscal && !isActivityOwnedByUser(activity) && !isTargeted) {
         setIsFeedbackDialogOpen(false);
         setIsLoadingFeedback(false);
         setFeedbackError("Você não tem acesso ao feedback desta atividade.");
@@ -795,7 +797,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         setIsLoadingFeedback(false);
       }
     },
-    [apiBaseUrl, isFiscal, isActivityOwnedByUser, updateFeedbackHighlight],
+    [apiBaseUrl, isFiscal, isActivityOwnedByUser, targetedActivityIndex, updateFeedbackHighlight],
   );
 
   const renderActionMenu = (atividade: Atividade, triggerClassName?: string) => (
@@ -812,7 +814,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-        {(isSupervisor || (isFiscal && isActivityOwnedByUser(atividade))) && (
+        {(isSupervisor || (isFiscal && (isActivityOwnedByUser(atividade) || targetedActivityIndex[atividade.id]))) && (
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
@@ -865,17 +867,20 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   useEffect(() => {
     if (!sessionUser?.email) {
       setFeedbackActivityMap({});
+      setTargetedActivityIndex({});
       return;
     }
 
     if (!isFiscal) {
       setFeedbackActivityMap({});
+      setTargetedActivityIndex({});
       return;
     }
 
     const token = getSessionToken();
     if (!token) {
       setFeedbackActivityMap({});
+      setTargetedActivityIndex({});
       return;
     }
 
@@ -896,10 +901,12 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
 
         const seen = readSeenFeedbacks();
         const nextMap: Record<string, boolean> = {};
+        const nextTargetIndex: Record<string, true> = {};
         if (Array.isArray(data.activities)) {
           data.activities.forEach((activityId) => {
             if (typeof activityId === "string" && activityId.trim().length > 0) {
               const trimmedId = activityId.trim();
+              nextTargetIndex[trimmedId] = true;
               if (!seen.has(trimmedId)) {
                 nextMap[trimmedId] = true;
               }
@@ -907,6 +914,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
           });
         }
         setFeedbackActivityMap(nextMap);
+        setTargetedActivityIndex(nextTargetIndex);
       } catch (error) {
         if (!cancelled) {
           console.error("Erro ao carregar feedbacks atribuídos:", error);
@@ -1202,7 +1210,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setSelectedActivity(activity);
     setSelectedActivityFeedback(null);
     setIsDetailOpen(true);
-    if (isSupervisor || isActivityOwnedByUser(activity)) {
+    const isTargeted = Boolean(targetedActivityIndex[activity.id]);
+    if (isSupervisor || isActivityOwnedByUser(activity) || isTargeted) {
       void loadActivityFeedback(activity);
     } else {
       setSelectedActivityFeedback(null);
