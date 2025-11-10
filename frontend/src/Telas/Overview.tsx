@@ -11,6 +11,51 @@ import { useAuth } from "@/Auth/context/AuthContext";
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const;
 const WEEKDAY_ORDER = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"] as const;
 
+function normalizeRoleValue(value: unknown): string[] {
+  if (!value) return [];
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized.length ? [normalized] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeRoleValue(item));
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const fromValues = Object.values(obj).flatMap((item) => normalizeRoleValue(item));
+    const fromBooleanKeys = Object.entries(obj)
+      .filter(([, val]) => typeof val === "boolean" && val)
+      .map(([key]) => key.trim().toLowerCase())
+      .filter((key) => key.length > 0);
+    return [...fromValues, ...fromBooleanKeys];
+  }
+  return [];
+}
+
+function userHasRole(
+  user:
+    | {
+        role?: unknown;
+        perfil?: { role?: unknown } | null;
+        profile?: { role?: unknown } | null;
+        roles?: unknown;
+      }
+    | null
+    | undefined,
+  role: string,
+) {
+  const target = role.trim().toLowerCase();
+  if (!target.length) return false;
+
+  const values = [
+    ...normalizeRoleValue(user?.role),
+    ...normalizeRoleValue(user?.perfil?.role),
+    ...normalizeRoleValue(user?.profile?.role),
+    ...normalizeRoleValue(user?.roles),
+  ];
+  return values.some((val) => val.includes(target));
+}
+
 const SEVERITY_RANK: Record<NivelAtividade, number> = {
   Baixo: 0,
   Normal: 1,
@@ -53,8 +98,7 @@ function buildLocalLabel(activity: Atividade) {
 
 export default function Overview() {
   const { sessionUser } = useAuth();
-  const userRole = sessionUser?.role ? sessionUser.role.trim().toLowerCase() : undefined;
-  const isFiscal = userRole === "fiscal";
+  const isFiscal = userHasRole(sessionUser, "fiscal");
   const { activities, isLoading } = useActivityContext();
 
   // Monta a série com o total de registros por dia útil, usado pelo gráfico de produtividade

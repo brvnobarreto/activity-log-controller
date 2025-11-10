@@ -60,7 +60,13 @@ function normalizeRoleValue(value: unknown): string[] {
     return value.flatMap((item) => normalizeRoleValue(item));
   }
   if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).flatMap((item) => normalizeRoleValue(item));
+    const obj = value as Record<string, unknown>;
+    const fromValues = Object.values(obj).flatMap((item) => normalizeRoleValue(item));
+    const fromBooleanKeys = Object.entries(obj)
+      .filter(([, val]) => typeof val === "boolean" && val)
+      .map(([key]) => key.trim().toLowerCase())
+      .filter((key) => key.length > 0);
+    return [...fromValues, ...fromBooleanKeys];
   }
   return [];
 }

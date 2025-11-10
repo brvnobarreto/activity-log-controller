@@ -92,6 +92,44 @@ function resolveUserRole(data: Record<string, unknown> | null | undefined): stri
 }
 
 /**
+ * Verifica de forma robusta se uma estrutura arbitrária contém um determinado papel.
+ * Considera strings diretas, arrays, objetos aninhados e também chaves booleanas (ex.: { fiscal: true }).
+ */
+function hasRoleFlag(data: Record<string, unknown> | null | undefined, role: string): boolean {
+  const target = role.trim().toLowerCase();
+  if (!target.length) return false;
+
+  const check = (value: unknown): boolean => {
+    if (!value) return false;
+    if (typeof value === "string") {
+      return value.trim().toLowerCase().includes(target);
+    }
+    if (Array.isArray(value)) {
+      return value.some(check);
+    }
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      for (const [key, val] of Object.entries(obj)) {
+        if (typeof val === "boolean" && val && key.trim().toLowerCase().includes(target)) {
+          return true;
+        }
+        if (check(val)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  return (
+    check((data as any)?.role) ||
+    check((data as any)?.perfil?.role) ||
+    check((data as any)?.profile?.role) ||
+    check((data as any)?.roles)
+  );
+}
+
+/**
  * Converte o objeto salvo no Firestore para o formato de resposta da API.
  * Além de transformar o timestamp em string ISO, garante que sempre temos
  * as mesmas chaves no JSON retornado.
@@ -157,9 +195,12 @@ export async function listActivities(req: Request, res: Response) {
     const userDoc = await db.collection("users").doc(requesterEmail).get();
     const userData = userDoc.exists ? (userDoc.data() as Record<string, unknown>) : null;
     const role = resolveUserRole(userData)?.toLowerCase() ?? "fiscal";
+    const isSupervisor = hasRoleFlag(userData, "supervisor");
+    const isFiscal = hasRoleFlag(userData, "fiscal") || role === "fiscal";
 
-    // Fiscais: somente atividades próprias (criadas por ele).
-    if (role === "fiscal") {
+    // Regra de segurança: por padrão, restringe a visão ao próprio usuário.
+    // Somente se o usuário for explicitamente supervisor (e não fiscal) permitimos visão global.
+    if (!isSupervisor || isFiscal) {
       // Evita dependência de índice composto: filtra por createdBy e ordena em memória.
       const filtered = await db
         .collection(COLLECTION_NAME)
