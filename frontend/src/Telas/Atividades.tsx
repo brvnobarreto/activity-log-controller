@@ -403,6 +403,22 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     deleteActivity,
   } = useActivityContext();
 
+  const normalizedUserEmail = useMemo(
+    () => (sessionUser?.email ? sessionUser.email.trim().toLowerCase() : ""),
+    [sessionUser?.email],
+  );
+
+  const isActivityOwnedByUser = useCallback(
+    (activity: Atividade) => {
+      const createdByNorm =
+        typeof activity.createdBy === "string" && activity.createdBy.trim().length > 0
+          ? activity.createdBy.trim().toLowerCase()
+          : "";
+      return createdByNorm.length > 0 && createdByNorm === normalizedUserEmail;
+    },
+    [normalizedUserEmail],
+  );
+
   const scope: ActivityScope = effectiveFilterByCurrentUser ? "personal" : "global";
 
   // Define a lista base (global ou pessoal) dependendo das props da tela
@@ -705,6 +721,14 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   // Fiscal abre o painel de feedback: buscamos o texto mais recente e removemos o destaque.
   const handleOpenFeedbackDialog = useCallback(
     async (activity: Atividade) => {
+      if (isFiscal && !isActivityOwnedByUser(activity)) {
+        setIsFeedbackDialogOpen(false);
+        setIsLoadingFeedback(false);
+        setFeedbackError("Você não tem acesso ao feedback desta atividade.");
+        setLatestFeedback(null);
+        return;
+      }
+
       setIsFeedbackDialogOpen(true);
       setIsLoadingFeedback(true);
       setFeedbackError(null);
@@ -744,7 +768,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         setIsLoadingFeedback(false);
       }
     },
-    [apiBaseUrl, isFiscal, updateFeedbackHighlight],
+    [apiBaseUrl, isFiscal, isActivityOwnedByUser, updateFeedbackHighlight],
   );
 
   const renderActionMenu = (atividade: Atividade, triggerClassName?: string) => (
@@ -761,7 +785,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-        {(isFiscal || isSupervisor) && (
+        {(isSupervisor || (isFiscal && isActivityOwnedByUser(atividade))) && (
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
@@ -1151,7 +1175,11 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setSelectedActivity(activity);
     setSelectedActivityFeedback(null);
     setIsDetailOpen(true);
-    void loadActivityFeedback(activity);
+    if (isSupervisor || isActivityOwnedByUser(activity)) {
+      void loadActivityFeedback(activity);
+    } else {
+      setSelectedActivityFeedback(null);
+    }
   }
 
   function closeActivityDetail() {
