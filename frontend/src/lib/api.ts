@@ -40,11 +40,8 @@ export function resolveApiBaseUrl() {
     return envBase
   }
 
-  const windowOrigin = getWindowOrigin()
-  if (windowOrigin) {
-    return windowOrigin
-  }
-
+  // Em produção, preferimos usar o fallback de API dedicado
+  // para evitar tentar chamar a própria origem do frontend.
   return PROD_FALLBACK_BASE_URL
 }
 

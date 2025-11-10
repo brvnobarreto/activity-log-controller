@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Link } from "react-router-dom"
 import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, updateProfile } from "firebase/auth"
 
 import { Button } from "@/components/ui/button"
@@ -182,7 +183,7 @@ export function SignupForm({ onGoogleSignInSuccess, ...props }: SignupFormProps)
               </Field>
 
               <FieldDescription className="text-center">
-                Já possui cadastro? <a className="underline" href="/login">Acesse sua conta</a>
+                Já possui cadastro? <Link className="underline" to="/login">Acesse sua conta</Link>
               </FieldDescription>
             </FieldGroup>
           </FieldGroup>

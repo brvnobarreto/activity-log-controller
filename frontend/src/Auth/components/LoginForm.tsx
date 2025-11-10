@@ -32,6 +32,7 @@ import { auth, googleProvider } from "@/lib/firebase"
 import { saveSession } from "../utils/sessionStorage"
 import { buildApiUrl, resolveApiBaseUrl } from "@/lib/api"
 import { useAuth } from "@/Auth/context/AuthContext"
+import { Link } from "react-router-dom"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
   onSuccess?: () => void
@@ -224,7 +225,7 @@ export function LoginForm({ className, onSuccess, onGoogleSuccess, ...props }: L
               </Field>
 
               <FieldDescription className="text-center">
-                Ainda não tem conta? <a href="/registro" className="underline">Crie agora</a>
+                Ainda não tem conta? <Link to="/registro" className="underline">Crie agora</Link>
               </FieldDescription>
             </FieldGroup>
           </form>
