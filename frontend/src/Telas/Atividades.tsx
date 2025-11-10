@@ -430,12 +430,30 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     [effectiveFilterByCurrentUser, personalActivities, globalActivities],
   );
 
-  // Fiscal: mostra somente atividades que possuem feedback destinado a ele (targetEmail == email logado).
+  // Fiscal: deve ver
+  // - suas próprias atividades (createdBy ~ email logado), e
+  // - atividades com feedback direcionado a ele (targetEmail == email logado).
+  // Unimos ambos os conjuntos preservando a ordem base e evitando duplicidade.
   const activities = useMemo(() => {
     if (!isFiscal) return baseActivities;
     const targetedIds = new Set(Object.keys(feedbackActivityMap || {}));
-    return baseActivities.filter((item) => targetedIds.has(item.id));
-  }, [baseActivities, feedbackActivityMap, isFiscal]);
+    const merged = new Map<string, Atividade>();
+    // Sempre começa pela base (pessoal ou global, conforme tela)
+    for (const item of baseActivities) {
+      merged.set(item.id, item);
+    }
+    // Garante que todas as pessoais apareçam
+    for (const item of personalActivities) {
+      merged.set(item.id, item);
+    }
+    // Inclui as com feedback direcionado (que podem não ser do próprio fiscal)
+    for (const item of globalActivities) {
+      if (targetedIds.has(item.id)) {
+        merged.set(item.id, item);
+      }
+    }
+    return Array.from(merged.values());
+  }, [baseActivities, feedbackActivityMap, globalActivities, isFiscal, personalActivities]);
 
   const groupedActivities = useMemo(() => groupActivitiesByDay(activities), [activities]);
   const groupedEntries = useMemo(() => Array.from(groupedActivities.entries()), [groupedActivities]);
