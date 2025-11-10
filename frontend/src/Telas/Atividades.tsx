@@ -463,7 +463,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       ["Gerado em", new Date().toLocaleString("pt-BR")],
       ["Total de registros", activities.length],
       [],
-      ["Data", "Descrição", "Responsável", "Email", "Local", "Sub-locais", "Status", "Feedback"],
+      ["Data", "Descrição", "Nível", "Responsável", "Email", "Local", "Sub-locais", "Status", "Feedback"],
     ];
 
     activities.forEach((atividade) => {
@@ -482,6 +482,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
       worksheetData.push([
         atividade.createdAt ? formatDateTime(atividade.createdAt) : "--",
         atividade.descricaoOriginal ?? atividade.registro ?? "--",
+        atividade.nivel ?? "--",
         atividade.nome ?? "--",
         atividade.createdBy ?? "--",
         atividade.localPrincipal ?? "--",

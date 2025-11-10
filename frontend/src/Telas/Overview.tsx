@@ -237,7 +237,7 @@ export default function Overview() {
           description={isLoading ? "Carregando..." : "Ação necessária"}
         />
 
-        <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Tendências e Distribuição</h2>
+        <h2 className="text-xl md:text-2xl font-semibold mb-4 col-span-full">Gráfico de Produtividade</h2>
         <div className="col-span-1 md:col-span-2 lg:col-span-3">
           <ProdutividadeChart data={produtividadeSemanal} />
         </div>
