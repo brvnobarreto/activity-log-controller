@@ -56,8 +56,8 @@ export default function Dashboard() {
         className="flex flex-col h-full"
       >
         <TabsList className="mx-auto">
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="activities">Dashboard</TabsTrigger>
+          <TabsTrigger value="overview">Dashboard</TabsTrigger>
+          <TabsTrigger value="activities">Visão Geral</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="flex-1">
           <div className="w-full h-full p-4 border rounded-lg">
