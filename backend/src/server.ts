@@ -32,11 +32,18 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
-const frontendUrl =
+const DEFAULT_DEV_URL = "http://localhost:3100";
+const DEFAULT_PROD_URL = "https://app-alc.vercel.app";
+
+const rawFrontendUrl =
   process.env.FRONTEND_URL ||
   process.env.VITE_FRONTEND_URL ||
   process.env.APP_FRONTEND_URL ||
-  "http://localhost:3100";
+  null;
+
+const frontendUrl =
+  rawFrontendUrl ??
+  (process.env.NODE_ENV === "production" ? DEFAULT_PROD_URL : DEFAULT_DEV_URL);
 
 // ============================================
 // MIDDLEWARES GLOBAIS
@@ -149,7 +156,7 @@ app.get('/', (_req, res) => {
   </head>
   <body>
     <main class="card">
-      <h1>Você chegou ao backend 👋</h1>
+      <h1>Você está no servidor</h1>
       <p>Este endereço é destinado à API do Activity Log Controller. Você será redirecionado em instantes para a interface web.</p>
       <a id="cta" href="${frontendUrl}" rel="noopener noreferrer">
         Ir para o aplicativo
