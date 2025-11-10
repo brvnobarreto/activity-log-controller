@@ -41,9 +41,16 @@ const rawFrontendUrl =
   process.env.APP_FRONTEND_URL ||
   null;
 
+const isRenderEnvironment = Boolean(process.env.RENDER);
+const isProductionNodeEnv = process.env.NODE_ENV === "production";
+const isProduction =
+  rawFrontendUrl !== null
+    ? rawFrontendUrl.startsWith("http")
+    : isRenderEnvironment || isProductionNodeEnv;
+
 const frontendUrl =
   rawFrontendUrl ??
-  (process.env.NODE_ENV === "production" ? DEFAULT_PROD_URL : DEFAULT_DEV_URL);
+  (isProduction ? DEFAULT_PROD_URL : DEFAULT_DEV_URL);
 
 // ============================================
 // MIDDLEWARES GLOBAIS
