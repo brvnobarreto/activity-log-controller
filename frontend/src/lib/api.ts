@@ -18,14 +18,6 @@ function getEnvBaseUrl() {
   return null
 }
 
-function getWindowOrigin() {
-  if (typeof window !== "undefined" && typeof window.location?.origin === "string") {
-    return window.location.origin
-  }
-
-  return null
-}
-
 function sanitizeBase(baseUrl: string) {
   return baseUrl.replace(/\/+$/, "") || DEV_BASE_URL
 }
