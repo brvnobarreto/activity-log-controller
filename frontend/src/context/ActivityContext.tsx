@@ -172,6 +172,10 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
 
       setIsLoading(true)
       try {
+        // fetchWithCache funciona como um cache de promessas: se outra parte da aplicação já pediu
+        // a lista de atividades, reutilizamos a requisição em andamento e evitamos múltiplos GET simultâneos.
+        // Pense nele como um "guarda-volume" de chamadas HTTP enquanto
+        // o resultado ainda não chegou.
         // O fetchWithCache evita chamadas duplicadas enquanto outra tela ainda está aguardando a mesma resposta.
         const data = await fetchWithCache<Atividade[]>(
           cacheKey,
@@ -307,27 +311,22 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
     })
   }, [apiBaseUrl, buildActivitiesCacheKey])
 
+  // useMemo garante que o filtro para atividades pessoais seja recalculado somente quando
+  // a lista de atividades ou o usuário da sessão mudarem. Isso evita trabalho desnecessário
+  // em cada renderização.
   const personalActivities = useMemo(() => {
     if (!sessionUser) {
       return [] as Atividade[]
     }
 
     const normalizedEmail = normalize(sessionUser.email)
-    const normalizedUid = normalize(sessionUser.uid)
-    const normalizedName = normalize(sessionUser.name)
-
-    const identifiers = [normalizedEmail, normalizedUid, normalizedName].filter((value): value is string => Boolean(value))
-
-    return activities.filter((activity) => {
-      const nome = normalize(activity.nome)
-      const createdBy = normalize(activity.createdBy)
-
-      if (createdBy && identifiers.includes(createdBy)) {
-        return true
-      }
-
-      return identifiers.includes(nome)
-    })
+    if (!normalizedEmail) {
+      return [] as Atividade[]
+    }
+    // Exibe SOMENTE atividades criadas pelo usuário logado.
+    // Para manter consistência (ex.: diferenças entre maiúsculas e minúsculas), normalizamos o e-mail
+    // e também o campo createdBy vindo do backend antes de comparar.
+    return activities.filter((activity) => normalize(activity.createdBy) === normalizedEmail)
   }, [activities, sessionUser])
 
   const value = useMemo<ActivityContextValue>(

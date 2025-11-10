@@ -48,6 +48,8 @@ type AtividadesProps = {
   autoOpenNew?: boolean;
 };
 
+// Normaliza campos de role que podem vir como string, array ou objeto
+// e retorna um array com todos os valores em minúsculas para facilitar comparação.
 function normalizeRoleValue(value: unknown): string[] {
   if (!value) return [];
   if (typeof value === "string") {
@@ -63,6 +65,9 @@ function normalizeRoleValue(value: unknown): string[] {
   return [];
 }
 
+// Verifica se o usuário possui um determinado papel, mesmo que ele esteja guardado
+// em formatos diferentes (string única, array ou objeto). Isso evita falhas quando
+// o backend muda o formato do campo de permissão.
 function userHasRole(user: { role?: unknown; perfil?: { role?: unknown } | null; profile?: { role?: unknown } | null; roles?: unknown } | null | undefined, role: string) {
   const target = role.trim().toLowerCase();
   if (!target.length) return false;
@@ -109,6 +114,8 @@ function formatDateTime(dateValue: string | null | undefined) {
   });
 }
 
+// Agrupa atividades por dia de criação para facilitar a renderização da lista.
+// O Map mantém a ordem de inserção e permite ler a quantidade de registros por data.
 function groupActivitiesByDay(list: Atividade[]) {
   const grouped = new Map<string, Atividade[]>();
 
@@ -408,6 +415,9 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   }, [sessionUser?.email]);
   // Exporta o registro completo de atividades para um arquivo XLSX,
   // incluindo o feedback mais recente vinculado a cada uma (quando existir).
+  // Gera o arquivo XLSX com o resumo das atividades. Essa função é memorizada com useCallback
+  // porque a interface passa como handler para um botão; assim evitamos recriar a função
+  // em todo render sem necessidade.
   const exportarDashboardXlsx = useCallback(async () => {
     if (!isSupervisor || !activities.length) return;
 
@@ -504,6 +514,9 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   }, [activities, apiBaseUrl, isSupervisor]);
 
 
+  // Lê do localStorage os feedbacks já visualizados pelo fiscal. Mantemos dentro de useCallback
+  // para reutilizar a mesma função nas dependências de outros hooks e evitar reler o storage
+  // quando nada mudou.
   const readSeenFeedbacks = useCallback(() => {
     if (!feedbackSeenStorageKey) return new Set<string>();
     try {
@@ -519,6 +532,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     return new Set<string>();
   }, [feedbackSeenStorageKey]);
 
+  // Persiste a lista de feedbacks vistos. Se a escrita falhar (ex.: storage cheio),
+  // apenas registramos um aviso em vez de quebrar o fluxo do usuário.
   const persistSeenFeedbacks = useCallback(
     (seen: Set<string>) => {
       if (!feedbackSeenStorageKey) return;
@@ -531,6 +546,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     [feedbackSeenStorageKey],
   );
 
+  // Marca um feedback como lido para não destacar novamente a mesma atividade.
+  // Usamos Set para operações rápidas e simples (has/add).
   const markFeedbackAsSeen = useCallback(
     (activityId: string) => {
       if (!feedbackSeenStorageKey) return;
@@ -578,6 +595,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     hasCoordinates;
 
   // Atualiza o mapa de destaque das atividades (true = feedback visível na lista).
+  // Controla o "badge" das atividades que ainda possuem feedback não lido.
+  // O state é um mapa: id da atividade -> true se precisa destacar.
   const updateFeedbackHighlight = useCallback(
     (activityId: string, hasFeedback: boolean) => {
       setFeedbackActivityMap((prev) => {
@@ -606,6 +625,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   );
 
   // Fiscal abre o painel de feedback: carregamos o conteúdo mais recente.
+  // Fiscal abre o painel de feedback: buscamos o texto mais recente e removemos o destaque.
   const handleOpenFeedbackDialog = useCallback(
     async (activity: Atividade) => {
       setIsFeedbackDialogOpen(true);
@@ -774,6 +794,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   }, [apiBaseUrl, isFiscal, readSeenFeedbacks, sessionUser?.email]);
 
   // Carrega o feedback da atividade quando abrimos o modal de detalhes.
+  // Quando abrimos o modal de detalhes, carregamos o feedback mais recente
+  // para exibir em tempo real dentro do diálogo.
   const loadActivityFeedback = useCallback(
     async (activity: Atividade) => {
       const token = getSessionToken();
@@ -808,6 +830,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   );
 
   // Função utilitária para limpar completamente o formulário da atividade
+  // Limpa todos os campos do formulário, incluindo estados auxiliares como preview de foto.
   const resetForm = useCallback(() => {
     setDescricao("");
     setNivel("");
@@ -835,6 +858,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
   }, []);
 
   // Preenche o formulário com os dados existentes quando estamos editando
+  // Preenche o formulário com uma atividade existente para edição.
+  // Esse método cuida de normalizar sublocais e converter coordenadas para string.
   const fillFormWithActivity = useCallback((activity: Atividade) => {
     setDescricao(activity.descricaoOriginal ?? activity.registro ?? "");
     setNivel(activity.nivel);
@@ -986,6 +1011,7 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     });
   }
 
+  // Inicia o fluxo de edição: prepara o formulário com os dados atuais e abre o diálogo.
   const startEditActivity = useCallback((activity: Atividade) => {
     resetForm();
     setEditingActivityId(activity.id);
@@ -995,6 +1021,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setSelectedActivity(activity);
   }, [fillFormWithActivity, resetForm]);
 
+  // Abre o modal de confirmação de exclusão. Mantemos o item pendente no estado
+  // para finalizar a ação depois que o usuário confirmar.
   const handleDeleteActivity = useCallback((activity: Atividade) => {
     setPendingDelete(activity);
     setIsConfirmDeleteOpen(true);
@@ -1006,6 +1034,8 @@ export default function Atividades({ title, filterByCurrentUser, autoOpenNew = f
     setPendingDelete(null);
   }, [isDeleting]);
 
+  // Remove a atividade escolhida e atualiza a UI. Usamos try/catch para manter
+  // a interface responsiva mesmo se a requisição falhar.
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
 
