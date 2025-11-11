@@ -22,6 +22,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import morgan from "morgan";
+import path from "path";
 import authRoutes from "./routes/authRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
@@ -77,8 +78,38 @@ app.use('/api/employees', employeeRoutes);
 // Rotas de feedbacks (prefixo: /api/feedbacks)
 app.use('/api/feedbacks', feedbackRoutes);
 
-// Página inicial amigável para quem acessa diretamente o backend no navegador.
-app.get('/', (_req, res) => {
+// ============================================
+// SERVIDOR DE ARQUIVOS ESTÁTICOS (PRODUÇÃO)
+// ============================================
+// Em produção, serve os arquivos estáticos do frontend
+if (isProduction) {
+  // Usa process.cwd() para obter o diretório raiz do projeto
+  // Isso funciona tanto em dev quanto após a compilação
+  const projectRoot = process.cwd();
+  const frontendDistPath = path.resolve(projectRoot, 'frontend/dist');
+  
+  // Serve arquivos estáticos (CSS, JS, imagens, etc.)
+  app.use(express.static(frontendDistPath));
+  
+  // Fallback para SPA: todas as rotas que não são da API retornam index.html
+  // Isso permite que o React Router faça o roteamento no cliente
+  app.get('*', (req, res, next) => {
+    // Ignora rotas da API
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    // Serve index.html para todas as outras rotas
+    res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+      if (err) {
+        console.error('Erro ao servir index.html:', err);
+        res.status(500).send('Erro ao carregar a aplicação');
+      }
+    });
+  });
+} else {
+  // Em desenvolvimento, apenas mostra a página de redirecionamento
+  // Página inicial amigável para quem acessa diretamente o backend no navegador.
+  app.get('/', (_req, res) => {
   res.type('html').send(`<!DOCTYPE html>
 <html lang="pt-BR">
   <head>
@@ -173,7 +204,8 @@ app.get('/', (_req, res) => {
     </main>
   </body>
 </html>`);
-});
+  });
+}
 
 // ============================================
 // INICIAR SERVIDOR
