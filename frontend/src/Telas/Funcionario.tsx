@@ -52,7 +52,7 @@ type ApiFuncionario = {
 
 const EMPLOYEE_CACHE_TTL = 1000 * 60 * 2;
 
-function buildEmployeesCacheKey(baseUrl: string | undefined, token: string) {
+function buildEmployeesCacheKey(baseUrl: string | null | undefined, token: string) {
   return `${baseUrl ?? ""}::employees::${token}`;
 }
 

@@ -1,4 +1,3 @@
-const DEV_BASE_URL = "http://localhost:3001"
 const PROD_FALLBACK_BASE_URL = "https://api-app-alc.onrender.com"
 
 function sanitizePath(path: string) {
