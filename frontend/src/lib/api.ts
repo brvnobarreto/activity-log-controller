@@ -18,28 +18,42 @@ function getEnvBaseUrl() {
   return null
 }
 
-function sanitizeBase(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, "") || DEV_BASE_URL
+function sanitizeBase(baseUrl: string | null) {
+  if (!baseUrl) {
+    return null
+  }
+  return baseUrl.replace(/\/+$/, "") || null
 }
 
-export function resolveApiBaseUrl() {
+export function resolveApiBaseUrl(): string | null {
+  // Em desenvolvimento, retornamos null para usar URLs relativas
+  // Isso permite que o proxy do Vite redirecione /api para http://localhost:3001
   if (import.meta.env.DEV) {
-    return DEV_BASE_URL
+    return null
   }
 
+  // Em produção, verificamos primeiro se há uma URL configurada via variável de ambiente
   const envBase = getEnvBaseUrl()
   if (envBase) {
     return envBase
   }
 
-  // Em produção, preferimos usar o fallback de API dedicado
-  // para evitar tentar chamar a própria origem do frontend.
+  // Em produção, usamos o fallback de API dedicado
   return PROD_FALLBACK_BASE_URL
 }
 
-export function buildApiUrl(path: string, baseUrl = resolveApiBaseUrl()) {
-  const sanitizedBase = sanitizeBase(baseUrl)
+export function buildApiUrl(path: string, baseUrl: string | null = resolveApiBaseUrl()): string {
   const sanitizedPath = sanitizePath(path)
+  
+  // Se não há baseUrl (dev mode com proxy), retornamos URL relativa
+  if (!baseUrl) {
+    return sanitizedPath
+  }
+
+  const sanitizedBase = sanitizeBase(baseUrl)
+  if (!sanitizedBase) {
+    return sanitizedPath
+  }
 
   try {
     return new URL(sanitizedPath, sanitizedBase).toString()
