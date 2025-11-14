@@ -84,9 +84,9 @@ app.use('/api/feedbacks', feedbackRoutes);
 // Em produção, serve os arquivos estáticos do frontend
 if (isProduction) {
   // Usa process.cwd() para obter o diretório raiz do projeto
-  // Isso funciona tanto em dev quanto após a compilação
+  // No Render com root directory 'backend', o frontend está em ../frontend/dist
   const projectRoot = process.cwd();
-  const frontendDistPath = path.resolve(projectRoot, 'frontend/dist');
+  const frontendDistPath = path.resolve(projectRoot, '..', 'frontend/dist');
   
   // Serve arquivos estáticos (CSS, JS, imagens, etc.)
   app.use(express.static(frontendDistPath));
