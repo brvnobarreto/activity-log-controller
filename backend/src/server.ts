@@ -93,7 +93,7 @@ if (isProduction) {
   
   // Fallback para SPA: todas as rotas que não são da API retornam index.html
   // Isso permite que o React Router faça o roteamento no cliente
-  app.get('*', (req, res, next) => {
+  app.get('/:path(*)', (req, res, next) => {
     // Ignora rotas da API
     if (req.path.startsWith('/api')) {
       return next();
