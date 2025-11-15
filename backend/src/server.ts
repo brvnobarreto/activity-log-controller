@@ -129,18 +129,84 @@ if (isProduction) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Activity Log Controller – Backend</title>
     <style>
-      :root { --background: #0f0f0f; --foreground: #f4f4f5; --muted: #a1a1aa; --primary: #22c55e; --link: #3b82f6; }
-      body { background-color: var(--background); color: var(--foreground); font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 1rem; text-align: center; }
-      h1 { font-size: 2rem; color: var(--primary); margin-bottom: 0.5rem; }
-      p { font-size: 1rem; color: var(--muted); margin: 0.5rem 0; }
-      code { background: rgba(255,255,255,0.1); padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: radial-gradient(circle at top, #f8fafc 0%, #e2e8f0 40%, #cbd5f5 100%);
+      }
+      .card {
+        max-width: 480px;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(6px);
+        border-radius: 16px;
+        padding: 2.5rem 2rem;
+        box-shadow: 0 25px 50px -12px rgba(30, 64, 175, 0.25);
+        text-align: center;
+        color: #1f2937;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(1.8rem, 5vw, 2.25rem);
+        font-weight: 700;
+        color: #1d4ed8;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #4b5563;
+      }
+      a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: #fff;
+        padding: 0.75rem 1.5rem;
+        border-radius: 999px;
+        font-weight: 600;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        box-shadow: 0 12px 30px -10px rgba(37, 99, 235, 0.5);
+      }
+      a:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 35px -15px rgba(29, 78, 216, 0.6);
+        filter: brightness(1.05);
+      }
+      .hint {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+      }
+      code {
+        background: rgba(30, 64, 175, 0.1);
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.9em;
+      }
     </style>
   </head>
   <body>
-    <h1>✅ Servidor disponível</h1>
-    <p>Este é o servidor backend do Activity Log Controller.</p>
-    <p>A API está disponível em <code>/api/*</code></p>
-    <p>Use o serviço Static Site do frontend para acessar a interface web.</p>
+    <main class="card">
+      <h1>Você está no servidor</h1>
+      <p>Este endereço é destinado à API do Activity Log Controller. A API está disponível em <code>/api/*</code></p>
+      <p>Use o serviço Static Site do frontend para acessar a interface web.</p>
+      <p class="hint">Backend rodando em produção</p>
+    </main>
   </body>
 </html>`);
     });
