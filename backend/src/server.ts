@@ -23,6 +23,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import path from "path";
+import fs from "fs";
 import authRoutes from "./routes/authRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
@@ -81,36 +82,84 @@ app.use('/api/feedbacks', feedbackRoutes);
 // ============================================
 // SERVIDOR DE ARQUIVOS ESTÁTICOS (PRODUÇÃO)
 // ============================================
-// Em produção, serve os arquivos estáticos do frontend
+// Em produção, serve os arquivos estáticos do frontend se disponível
 if (isProduction) {
-  // Usa process.cwd() para obter o diretório raiz do projeto
-  // Isso funciona tanto em dev quanto após a compilação
   const projectRoot = process.cwd();
   const frontendDistPath = path.resolve(projectRoot, 'frontend/dist');
+  const indexPath = path.join(frontendDistPath, 'index.html');
   
-  // Serve arquivos estáticos (CSS, JS, imagens, etc.)
-  app.use(express.static(frontendDistPath));
+  // Verifica se o frontend foi buildado e está disponível
+  const frontendExists = fs.existsSync(indexPath);
   
-  // Fallback para SPA: todas as rotas que não são da API retornam index.html
-  // Isso permite que o React Router faça o roteamento no cliente
-  // Usa app.use ao invés de app.get('*') porque Express 5 não suporta mais wildcard simples
-  app.use((req, res, next) => {
-    // Ignora rotas da API
-    if (req.path.startsWith('/api')) {
-      return next();
-    }
-    // Ignora métodos que não são GET
-    if (req.method !== 'GET') {
-      return next();
-    }
-    // Serve index.html para todas as outras rotas GET
-    res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
-      if (err) {
-        console.error('Erro ao servir index.html:', err);
-        res.status(500).send('Erro ao carregar a aplicação');
+  if (frontendExists) {
+    console.log(`✓ Frontend encontrado em: ${frontendDistPath}`);
+    // Serve arquivos estáticos (CSS, JS, imagens, etc.)
+    app.use(express.static(frontendDistPath));
+    
+    // Fallback para SPA: todas as rotas que não são da API retornam index.html
+    // Isso permite que o React Router faça o roteamento no cliente
+    // Usa app.use ao invés de app.get('*') porque Express 5 não suporta mais wildcard simples
+    app.use((req, res, next) => {
+      // Ignora rotas da API
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      // Ignora métodos que não são GET
+      if (req.method !== 'GET') {
+        return next();
+      }
+      // Serve index.html para todas as outras rotas GET
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('Erro ao servir index.html:', err);
+          res.status(500).send('Erro ao carregar a aplicação');
+        }
+      });
+    });
+  } else {
+    console.warn(`⚠ Frontend não encontrado em: ${frontendDistPath}`);
+    console.warn('O backend servirá apenas a API. Use o serviço Static Site do frontend para servir os arquivos estáticos.');
+    
+    // Rota raiz informativa
+    app.get('/', (_req, res) => {
+      res.type('html').send(`<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Activity Log Controller – Backend</title>
+    <style>
+      :root { --background: #0f0f0f; --foreground: #f4f4f5; --muted: #a1a1aa; --primary: #22c55e; --link: #3b82f6; }
+      body { background-color: var(--background); color: var(--foreground); font-family: system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 1rem; text-align: center; }
+      h1 { font-size: 2rem; color: var(--primary); margin-bottom: 0.5rem; }
+      p { font-size: 1rem; color: var(--muted); margin: 0.5rem 0; }
+      code { background: rgba(255,255,255,0.1); padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+    </style>
+  </head>
+  <body>
+    <h1>✅ Servidor disponível</h1>
+    <p>Este é o servidor backend do Activity Log Controller.</p>
+    <p>A API está disponível em <code>/api/*</code></p>
+    <p>Use o serviço Static Site do frontend para acessar a interface web.</p>
+  </body>
+</html>`);
+    });
+    
+    // Para outras rotas não-API, retorna 404
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      if (req.method === 'GET') {
+        res.status(404).json({ 
+          error: 'Not found',
+          message: 'Frontend não está sendo servido por este servidor. Use o serviço Static Site do frontend.'
+        });
+      } else {
+        next();
       }
     });
-  });
+  }
 } else {
   // Em desenvolvimento, apenas mostra a página de redirecionamento
   // Página inicial amigável para quem acessa diretamente o backend no navegador.
