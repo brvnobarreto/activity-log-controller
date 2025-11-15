@@ -93,12 +93,17 @@ if (isProduction) {
   
   // Fallback para SPA: todas as rotas que não são da API retornam index.html
   // Isso permite que o React Router faça o roteamento no cliente
-  app.get('*', (req, res, next) => {
+  // Usa app.use ao invés de app.get('*') porque Express 5 não suporta mais wildcard simples
+  app.use((req, res, next) => {
     // Ignora rotas da API
     if (req.path.startsWith('/api')) {
       return next();
     }
-    // Serve index.html para todas as outras rotas
+    // Ignora métodos que não são GET
+    if (req.method !== 'GET') {
+      return next();
+    }
+    // Serve index.html para todas as outras rotas GET
     res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
       if (err) {
         console.error('Erro ao servir index.html:', err);
