@@ -23,7 +23,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import morgan from "morgan";
 import path from "path";
-import fs from "fs";
 import authRoutes from "./routes/authRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
@@ -85,54 +84,28 @@ app.use('/api/feedbacks', feedbackRoutes);
 // Em produção, serve os arquivos estáticos do frontend
 if (isProduction) {
   // Usa process.cwd() para obter o diretório raiz do projeto
-  // No Render com root directory 'backend', o frontend está em ../frontend/dist
+  // Isso funciona tanto em dev quanto após a compilação
   const projectRoot = process.cwd();
+  const frontendDistPath = path.resolve(projectRoot, 'frontend/dist');
   
-  // Tenta múltiplos caminhos possíveis para encontrar o frontend/dist
-  const possiblePaths = [
-    path.resolve(projectRoot, '..', 'frontend', 'dist'),
-    path.resolve(projectRoot, 'frontend', 'dist'),
-    path.resolve(projectRoot, '..', '..', 'frontend', 'dist'),
-  ];
+  // Serve arquivos estáticos (CSS, JS, imagens, etc.)
+  app.use(express.static(frontendDistPath));
   
-  let frontendDistPath: string | null = null;
-  
-  for (const testPath of possiblePaths) {
-    const indexPath = path.join(testPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      frontendDistPath = testPath;
-      console.log(`Frontend encontrado em: ${frontendDistPath}`);
-      break;
+  // Fallback para SPA: todas as rotas que não são da API retornam index.html
+  // Isso permite que o React Router faça o roteamento no cliente
+  app.get('*', (req, res, next) => {
+    // Ignora rotas da API
+    if (req.path.startsWith('/api')) {
+      return next();
     }
-  }
-  
-  if (!frontendDistPath) {
-    console.error('Frontend dist não encontrado. Caminhos testados:', possiblePaths);
-    console.error('process.cwd():', projectRoot);
-    console.error('__dirname:', __dirname);
-  } else {
-    // Serve arquivos estáticos (CSS, JS, imagens, etc.)
-    app.use(express.static(frontendDistPath));
-    
-    // Fallback para SPA: todas as rotas que não são da API retornam index.html
-    // Isso permite que o React Router faça o roteamento no cliente
-    app.use((req, res, next) => {
-      const isGet = req.method === 'GET';
-      const isApiRoute = req.path.startsWith('/api');
-      if (!isGet || isApiRoute) {
-        return next();
+    // Serve index.html para todas as outras rotas
+    res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+      if (err) {
+        console.error('Erro ao servir index.html:', err);
+        res.status(500).send('Erro ao carregar a aplicação');
       }
-
-      const indexPath = path.join(frontendDistPath!, 'index.html');
-      res.sendFile(indexPath, (err) => {
-        if (err) {
-          console.error('Erro ao servir index.html:', err);
-          console.error('Caminho tentado:', indexPath);
-          res.status(500).send('Erro ao carregar a aplicação');
-        }
-      });
     });
-  }
+  });
 } else {
   // Em desenvolvimento, apenas mostra a página de redirecionamento
   // Página inicial amigável para quem acessa diretamente o backend no navegador.
