@@ -202,10 +202,12 @@ if (isProduction) {
   </head>
   <body>
     <main class="card">
-      <h1>Você está no servidor</h1>
-      <p>Este endereço é destinado à API do Activity Log Controller. A API está disponível em <code>/api/*</code></p>
-      <p>Use o serviço Static Site do frontend para acessar a interface web.</p>
-      <p class="hint">Backend rodando em produção</p>
+      <h1>Activity Log Controller</h1>
+      <p>Esta é a página do servidor da aplicação.</p>
+      <a href="${frontendUrl}" rel="noopener noreferrer" target="_blank">
+        Ir para o aplicativo
+        <span aria-hidden="true">↗</span>
+      </a>
     </main>
   </body>
 </html>`);
