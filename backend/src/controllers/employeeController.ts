@@ -322,68 +322,99 @@ export async function listEmployees(_req: Request, res: Response) {
   try {
     const employeesMap = new Map<string, ReturnType<typeof mapEmployeeDoc>>();
 
+    // Buscar funcionários de todas as coleções do Firestore
     for (const collectionName of READ_COLLECTION_OPTIONS) {
-      const snapshot = await getCollectionSnapshot(collectionName);
+      try {
+        const snapshot = await getCollectionSnapshot(collectionName);
+        const docCount = snapshot.size;
+        
+        if (docCount > 0) {
+          console.log(`[listEmployees] Encontrados ${docCount} documentos na coleção ${collectionName}`);
+        }
 
-      snapshot.forEach((doc) => {
-        const mapped = mapEmployeeDoc(doc);
-        employeesMap.set(mapped.id, mapped);
-        rememberCollection(mapped.id, collectionName);
-      });
+        snapshot.forEach((doc) => {
+          const mapped = mapEmployeeDoc(doc);
+          // Adiciona ao Map apenas se ainda não existe um funcionário com esse ID
+          // Isso garante que todos os funcionários únicos sejam incluídos
+          if (!employeesMap.has(mapped.id)) {
+            employeesMap.set(mapped.id, mapped);
+          } else {
+            console.log(`[listEmployees] Funcionário com ID ${mapped.id} já existe, mantendo o primeiro encontrado`);
+          }
+          // Sempre registra a coleção para referência futura, mesmo se já existe no Map
+          rememberCollection(mapped.id, collectionName);
+        });
+      } catch (collectionError) {
+        // Se uma coleção falhar, continua com as outras
+        console.warn(`Erro ao buscar coleção ${collectionName}:`, collectionError);
+      }
     }
 
+    // Usa o Map para deduplicação: se houver IDs duplicados, mantém apenas o primeiro
+    // Isso garante que todos os funcionários únicos sejam incluídos
     let employees = sortEmployeesByDate(Array.from(employeesMap.values()));
+    console.log(`[listEmployees] Total de funcionários únicos encontrados: ${employees.length}`);
 
-    // Fallback: se nenhuma coleção do Firestore tiver documentos, tentar listar usuários do Firebase Auth
-    if (employees.length === 0) {
-      try {
-        const authUsers = await auth.listUsers();
-        const enriched = await Promise.all(
-          authUsers.users.map(async (user) => {
-            const emailLower = user.email?.toLowerCase();
-            let firestoreRole: string | undefined;
-            try {
-              if (emailLower) {
-                const userDoc = await db.collection("users").doc(emailLower).get();
-                if (userDoc.exists) {
-                  const data = userDoc.data() ?? {};
-                  const roleCandidate = extractString(
-                    getValueByPath(data, "role") ??
-                      getValueByPath(data, "perfil.role") ??
-                      getValueByPath(data, "roles.primary") ??
-                      getValueByPath(data, "roles.0") ??
-                      getValueByPath(data, "cargo.nome") ??
-                      data.cargo ?? data.funcao
-                  );
-                  if (roleCandidate) firestoreRole = roleCandidate;
-                }
+    // Complementar com usuários do Firebase Auth que não estão no Firestore
+    try {
+      const authUsers = await auth.listUsers();
+      const authUsersMap = new Map<string, ReturnType<typeof mapEmployeeDoc>>();
+      
+      await Promise.all(
+        authUsers.users.map(async (user) => {
+          // Pula se já existe no Map de funcionários do Firestore
+          if (employeesMap.has(user.uid)) {
+            return;
+          }
+
+          const emailLower = user.email?.toLowerCase();
+          let firestoreRole: string | undefined;
+          try {
+            if (emailLower) {
+              const userDoc = await db.collection("users").doc(emailLower).get();
+              if (userDoc.exists) {
+                const data = userDoc.data() ?? {};
+                const roleCandidate = extractString(
+                  getValueByPath(data, "role") ??
+                    getValueByPath(data, "perfil.role") ??
+                    getValueByPath(data, "roles.primary") ??
+                    getValueByPath(data, "roles.0") ??
+                    getValueByPath(data, "cargo.nome") ??
+                    data.cargo ?? data.funcao
+                );
+                if (roleCandidate) firestoreRole = roleCandidate;
               }
-            } catch {
-              // ignore errors reading user profile
             }
+          } catch {
+            // ignore errors reading user profile
+          }
 
-            const funcaoFinal =
-              firestoreRole ||
-              (user.customClaims?.funcao as string | undefined) ||
-              (user.customClaims?.role as string | undefined) ||
-              "--";
+          const funcaoFinal =
+            firestoreRole ||
+            (user.customClaims?.funcao as string | undefined) ||
+            (user.customClaims?.role as string | undefined) ||
+            "--";
 
-            return {
-              id: user.uid,
-              nomeCompleto: (user.displayName || user.email || "Funcionário").trim(),
-              matricula: (user.customClaims?.matricula as string | undefined) || "--",
-              funcao: funcaoFinal,
-              fotoUrl: user.photoURL || null,
-              createdAt: user.metadata?.creationTime || null,
-              updatedAt: user.metadata?.lastSignInTime || null,
-            };
-          })
-        );
-        employees = sortEmployeesByDate(enriched);
-      } catch (authErr) {
-        // Mantém vazio caso Auth também não resolva
-        console.error("Fallback Auth users falhou:", authErr);
-      }
+          const authEmployee = {
+            id: user.uid,
+            nomeCompleto: (user.displayName || user.email || "Funcionário").trim(),
+            matricula: (user.customClaims?.matricula as string | undefined) || "--",
+            funcao: funcaoFinal,
+            fotoUrl: user.photoURL || null,
+            createdAt: user.metadata?.creationTime || null,
+            updatedAt: user.metadata?.lastSignInTime || null,
+          };
+
+          authUsersMap.set(user.uid, authEmployee);
+        })
+      );
+
+      // Adiciona os funcionários do Auth que não estão no Firestore
+      const authEmployees = Array.from(authUsersMap.values());
+      employees = sortEmployeesByDate([...employees, ...authEmployees]);
+    } catch (authErr) {
+      // Se Auth falhar, continua com os funcionários do Firestore
+      console.warn("Erro ao buscar usuários do Auth:", authErr);
     }
 
     return res.json({ employees });
