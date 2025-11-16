@@ -24,6 +24,8 @@ import dotenv from "dotenv";
 import morgan from "morgan";
 import path from "path";
 import fs from "fs";
+import swaggerUi from "swagger-ui-express";
+import { parse as parseYaml } from "yaml";
 import authRoutes from "./routes/authRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
@@ -65,6 +67,24 @@ app.use(cors());
 // Aumenta o limite para suportar imagens em Base64 (~1 MB) vindas do frontend
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+
+// ============================================
+// DOCUMENTAÇÃO DA API (SWAGGER UI)
+// ============================================
+try {
+  const openApiPath = path.resolve(process.cwd(), 'openapi.yaml');
+  const openApiFile = fs.readFileSync(openApiPath, 'utf8');
+  const swaggerDocument = parseYaml(openApiFile);
+  
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Activity Log Controller API',
+  }));
+  
+  console.log(`✓ Documentação da API disponível em: http://localhost:${port}/api-docs`);
+} catch (error) {
+  console.warn('⚠ Não foi possível carregar a documentação Swagger:', error instanceof Error ? error.message : 'Erro desconhecido');
+}
 
 // ============================================
 // ROTAS

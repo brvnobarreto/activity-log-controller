@@ -144,7 +144,7 @@ export async function register(req: Request, res: Response) {
 
     const emailLower = email.toLowerCase();
 
-    // Passo 2: cria o usuário no Firebase Authentication (ele cuida da senha para nós)
+    // Passo 2: cria o usuário no Firebase Authentication
     let firebaseUser;
     try {
       firebaseUser = await auth.createUser({

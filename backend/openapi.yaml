@@ -1,0 +1,1147 @@
+openapi: 3.0.3
+info:
+  title: Activity Log Controller API
+  description: |
+    API RESTful para o sistema de controle de atividades e log de funcionários.
+    Esta API permite gerenciar autenticação de usuários, cadastro de funcionários,
+    registro de atividades e envio de feedbacks entre supervisores e fiscais.
+  version: 1.0.0
+  contact:
+    name: Equipe de Desenvolvimento
+    email: suporte@activitylogcontroller.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3001/api
+    description: Servidor de desenvolvimento local
+  - url: https://activity-log-controller.onrender.com/api
+    description: Servidor de produção
+
+tags:
+  - name: Autenticação
+    description: Endpoints para registro, login, logout e gerenciamento de sessão
+  - name: Funcionários
+    description: CRUD de funcionários do sistema
+  - name: Atividades
+    description: Gerenciamento de atividades registradas pelos fiscais
+  - name: Feedbacks
+    description: Sistema de feedback entre supervisores e fiscais
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido através do endpoint de login
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mensagem de erro
+        message:
+          type: string
+          description: Detalhes adicionais do erro
+        fields:
+          type: object
+          description: Campos que falharam na validação
+
+    User:
+      type: object
+      properties:
+        uid:
+          type: string
+          description: ID único do usuário no Firebase Auth
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+        name:
+          type: string
+          description: Nome completo do usuário
+        picture:
+          type: string
+          format: uri
+          nullable: true
+          description: URL da foto de perfil
+        provider:
+          type: string
+          enum: [email, google]
+          description: Provedor de autenticação
+        role:
+          type: string
+          enum: [fiscal, supervisor]
+          description: Papel do usuário no sistema
+        emailVerified:
+          type: boolean
+          description: Indica se o email foi verificado
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          example: usuario@exemplo.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: senhaSegura123
+        name:
+          type: string
+          minLength: 2
+          example: João Silva
+
+    LoginRequest:
+      type: object
+      required:
+        - idToken
+      properties:
+        idToken:
+          type: string
+          description: Token ID gerado pelo Firebase Client SDK após autenticação
+          example: eyJhbGciOiJSUzI1NiIsImtpZCI6IjEyMzQ1NiJ9...
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Login realizado com sucesso
+        token:
+          type: string
+          description: Token JWT da API para autenticação em endpoints protegidos
+        sessionId:
+          type: string
+          description: ID da sessão criada
+        user:
+          $ref: '#/components/schemas/User'
+
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID único do funcionário no Firestore
+        nomeCompleto:
+          type: string
+          example: Maria Santos
+        matricula:
+          type: string
+          example: MAT001
+        funcao:
+          type: string
+          example: fiscal
+        fotoUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    EmployeeInput:
+      type: object
+      required:
+        - nomeCompleto
+        - matricula
+        - funcao
+      properties:
+        nomeCompleto:
+          type: string
+          minLength: 1
+          example: Maria Santos
+        matricula:
+          type: string
+          minLength: 1
+          example: MAT001
+        funcao:
+          type: string
+          minLength: 1
+          example: fiscal
+        fotoUrl:
+          type: string
+          format: uri
+          nullable: true
+
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID único da atividade no Firestore
+        nome:
+          type: string
+          example: Inspeção de Segurança
+        descricao:
+          type: string
+          example: Verificação das condições de segurança no prédio A
+        descricaoOriginal:
+          type: string
+          example: Verificação das condições de segurança no prédio A
+        nivel:
+          type: string
+          enum: [Baixo, Normal, Alto, Máximo]
+          example: Normal
+        status:
+          type: string
+          enum: [Pendente, Concluído, Não Concluído]
+          example: Pendente
+        localPrincipal:
+          type: string
+          nullable: true
+          example: Prédio A - Térreo
+        subLocais:
+          type: array
+          items:
+            type: string
+          example: [Corredor 1, Sala 101]
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+              format: float
+              example: -3.7172
+            longitude:
+              type: number
+              format: float
+              example: -38.5433
+        fotoUrl:
+          type: string
+          format: uri
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdBy:
+          type: string
+          format: email
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ActivityInput:
+      type: object
+      required:
+        - descricao
+        - nivel
+        - status
+        - latitude
+        - longitude
+        - fotoUrl
+      properties:
+        nome:
+          type: string
+          example: Inspeção de Segurança
+        name:
+          type: string
+          description: Alias para 'nome' (aceito para compatibilidade)
+        descricao:
+          type: string
+          minLength: 1
+          example: Verificação das condições de segurança no prédio A
+        descricaoOriginal:
+          type: string
+          example: Verificação das condições de segurança no prédio A
+        nivel:
+          type: string
+          enum: [Baixo, Normal, Alto, Máximo]
+          example: Normal
+        status:
+          type: string
+          enum: [Pendente, Concluído, Não Concluído]
+          example: Pendente
+        localPrincipal:
+          type: string
+          example: Prédio A - Térreo
+        subLocais:
+          type: array
+          items:
+            type: string
+          example: [Corredor 1, Sala 101]
+        latitude:
+          type: number
+          format: float
+          example: -3.7172
+        longitude:
+          type: number
+          format: float
+          example: -38.5433
+        fotoUrl:
+          type: string
+          format: uri
+          minLength: 1
+          example: https://example.com/foto.jpg
+
+    Feedback:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID único do feedback no Firestore
+        subject:
+          type: string
+          example: Feedback sobre atividade #abc123
+        contentHtml:
+          type: string
+          description: Conteúdo HTML sanitizado do feedback
+        contentText:
+          type: string
+          description: Versão em texto plano do feedback
+        authorEmail:
+          type: string
+          format: email
+          description: Email do supervisor que enviou o feedback
+        authorName:
+          type: string
+          example: Supervisor João
+        activityId:
+          type: string
+          nullable: true
+          description: ID da atividade relacionada
+        targetEmail:
+          type: string
+          format: email
+          nullable: true
+          description: Email do fiscal destinatário
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    FeedbackInput:
+      type: object
+      required:
+        - contentHtml
+        - activityId
+        - targetEmail
+      properties:
+        subject:
+          type: string
+          example: Feedback sobre atividade #abc123
+        contentHtml:
+          type: string
+          minLength: 1
+          description: Conteúdo HTML do feedback (scripts serão removidos)
+        contentText:
+          type: string
+          description: Versão em texto plano (opcional, será gerado automaticamente se não fornecido)
+        activityId:
+          type: string
+          minLength: 1
+          example: abc123xyz
+        targetEmail:
+          type: string
+          format: email
+          minLength: 1
+          example: fiscal@exemplo.com
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Autenticação
+      summary: Registrar novo usuário
+      description: |
+        Cria um novo usuário no Firebase Authentication e salva o perfil no Firestore.
+        O usuário receberá um email de verificação que deve ser confirmado antes do primeiro login.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Usuário criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Autenticação
+      summary: Login de usuário
+      description: |
+        Autentica um usuário usando o idToken gerado pelo Firebase Client SDK.
+        Retorna um token JWT da API e cria uma sessão para auditoria.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Email não verificado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/google:
+    post:
+      tags:
+        - Autenticação
+      summary: Login com Google
+      description: |
+        Autentica um usuário usando o idToken do Google obtido através do Firebase Client SDK.
+        Cria ou atualiza o perfil do usuário no Firestore.
+      operationId: loginWithGoogle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idToken
+              properties:
+                idToken:
+                  type: string
+                  description: Token ID do Google obtido via Firebase Client SDK
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      tags:
+        - Autenticação
+      summary: Logout de usuário
+      description: |
+        Invalida todas as sessões ativas do usuário autenticado.
+        Requer autenticação via Bearer token.
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout realizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+        '400':
+          description: Token não fornecido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags:
+        - Autenticação
+      summary: Obter usuário autenticado
+      description: |
+        Retorna os dados do usuário atualmente autenticado.
+        Requer autenticação via Bearer token.
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dados do usuário
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /employees:
+    get:
+      tags:
+        - Funcionários
+      summary: Listar funcionários
+      description: |
+        Retorna a lista de todos os funcionários cadastrados no sistema.
+        Requer autenticação via Bearer token.
+      operationId: listEmployees
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de funcionários
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employees:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Employee'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Funcionários
+      summary: Criar funcionário
+      description: |
+        Cria um novo funcionário no sistema.
+        Requer autenticação via Bearer token.
+      operationId: createEmployee
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeInput'
+      responses:
+        '201':
+          description: Funcionário criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employee:
+                    $ref: '#/components/schemas/Employee'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /employees/{id}:
+    put:
+      tags:
+        - Funcionários
+      summary: Atualizar funcionário
+      description: |
+        Atualiza os dados de um funcionário existente.
+        Apenas supervisores podem alterar a função de um funcionário.
+        Requer autenticação via Bearer token.
+      operationId: updateEmployee
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID do funcionário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeInput'
+      responses:
+        '200':
+          description: Funcionário atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employee:
+                    $ref: '#/components/schemas/Employee'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Permissão negada (apenas supervisores podem alterar função)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Funcionário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Funcionários
+      summary: Remover funcionário
+      description: |
+        Remove um funcionário do sistema.
+        Apenas supervisores podem remover funcionários.
+        Requer autenticação via Bearer token.
+      operationId: deleteEmployee
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID do funcionário
+      responses:
+        '204':
+          description: Funcionário removido com sucesso
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Permissão negada (apenas supervisores)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Funcionário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /activities:
+    get:
+      tags:
+        - Atividades
+      summary: Listar atividades
+      description: |
+        Retorna a lista de atividades cadastradas.
+        Fiscais veem apenas suas próprias atividades.
+        Supervisores veem todas as atividades.
+        Requer autenticação via Bearer token.
+      operationId: listActivities
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de atividades
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Activity'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Atividades
+      summary: Criar atividade
+      description: |
+        Cria uma nova atividade no sistema.
+        Requer autenticação via Bearer token.
+      operationId: createActivity
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityInput'
+      responses:
+        '201':
+          description: Atividade criada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity:
+                    $ref: '#/components/schemas/Activity'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /activities/{id}:
+    put:
+      tags:
+        - Atividades
+      summary: Atualizar atividade
+      description: |
+        Atualiza os dados de uma atividade existente.
+        Requer autenticação via Bearer token.
+      operationId: updateActivity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID da atividade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityInput'
+      responses:
+        '200':
+          description: Atividade atualizada com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activity:
+                    $ref: '#/components/schemas/Activity'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Atividade não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Atividades
+      summary: Remover atividade
+      description: |
+        Remove uma atividade do sistema.
+        Requer autenticação via Bearer token.
+      operationId: deleteActivity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID da atividade
+      responses:
+        '200':
+          description: Atividade removida com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Atividade não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /feedbacks:
+    post:
+      tags:
+        - Feedbacks
+      summary: Enviar feedback
+      description: |
+        Envia um feedback de um supervisor para um fiscal sobre uma atividade específica.
+        Apenas supervisores podem enviar feedbacks.
+        Requer autenticação via Bearer token.
+      operationId: submitFeedback
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackInput'
+      responses:
+        '201':
+          description: Feedback enviado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback:
+                    $ref: '#/components/schemas/Feedback'
+        '400':
+          description: Dados inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Permissão negada (apenas supervisores)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /feedbacks/latest:
+    get:
+      tags:
+        - Feedbacks
+      summary: Obter feedbacks mais recentes
+      description: |
+        Retorna os feedbacks mais recentes.
+        Fiscais veem apenas feedbacks direcionados a eles.
+        Supervisores veem apenas feedbacks enviados por eles.
+        Requer autenticação via Bearer token.
+      operationId: getLatestFeedback
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 1
+          description: Número máximo de feedbacks a retornar (1-10)
+      responses:
+        '200':
+          description: Lista de feedbacks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedbacks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Feedback'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Permissão negada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /feedbacks/activity/{activityId}:
+    get:
+      tags:
+        - Feedbacks
+      summary: Obter feedback de uma atividade
+      description: |
+        Retorna o feedback mais recente associado a uma atividade específica.
+        Apenas o autor do feedback ou o fiscal destinatário podem acessar.
+        Requer autenticação via Bearer token.
+      operationId: getFeedbackByActivity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: activityId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID da atividade
+      responses:
+        '200':
+          description: Feedback encontrado ou null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback:
+                    $ref: '#/components/schemas/Feedback'
+                    nullable: true
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Permissão negada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /feedbacks/mine:
+    get:
+      tags:
+        - Feedbacks
+      summary: Listar feedbacks do fiscal
+      description: |
+        Retorna todos os feedbacks direcionados ao fiscal autenticado,
+        junto com a lista de IDs de atividades relacionadas.
+        Requer autenticação via Bearer token.
+      operationId: listFeedbacksForTarget
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de feedbacks e atividades relacionadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      type: string
+                    description: IDs das atividades que possuem feedbacks
+                  feedbacks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Feedback'
+        '401':
+          description: Não autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
